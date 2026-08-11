@@ -2,6 +2,14 @@
 
 本项目使用 `Qwen3-4B-Instruct-2507` 完成 [DimABSA2026](https://github.com/DimABSA/DimABSA2026) Track A 中文餐厅领域的 Task 1、Task 2 和 Task 3 测试。模型不进行 LoRA 微调或参数训练。
 
+## 实验方法
+
+- 使用官方 `Qwen3-4B-Instruct-2507` BF16，通过 Transformers 直接推理，不训练或微调模型。
+- Task 1 在 Dev 上比较 Direct、CoT 和 Few-shot CoT；Few-shot 将 5 条 Train 标注样本放入 Prompt，最终选择 Few-shot，并在 Dev 上分别拟合 V/A 线性校准参数。
+- Task 2/3 使用 Few-shot CoT，在 Prompt 中加入 8 条 Train 标注样本。模型一次生成 `(Aspect, Category, Opinion, VA)` 四元组，再去掉 Category 得到 Task 2 三元组。
+- 程序检查 Aspect 和 Opinion 是否为原文片段、Category 是否合法，并记录格式或解析错误。Task 2/3 还根据 Dev 过滤低置信度抽取，并拟合 V/A 线性校准。
+- 所有 Prompt、过滤规则和校准参数均在 Train/Dev 上确定并冻结，Test 只进行一次最终推理和评测。
+
 ## Task 1：程度预测
 
 Task 1 根据文本和给定方面预测 Valence（正负程度）和 Arousal（激烈程度）。官方指标是 `RMSE_VA`，越低越好。

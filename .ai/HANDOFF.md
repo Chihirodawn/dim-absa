@@ -71,3 +71,4 @@
 - test 生成 3,549 个原始四元组，过滤校准后 2,883 个；金标准 2,861 个。`parse_failures=0`、`discarded_invalid_items=53`、耗时 918.38 秒、峰值显存 10.44 GiB。
 - 云端最终 GPU 2 MiB、利用率 0%；结果已同步到 `results/extraction_schema_v2/` 与 `results/extraction_final/`，原始 JSON/JSONL 被 Git 忽略。
 - 本地验证：9 项 unittest 通过，`py_compile` 通过，Ruff 通过。Task 2/3 代码、README、测试与汇总指标已按安全范围发布；原始预测和官方数据未上传。
+- README 已补充简短实验方法：说明 Task 1 的 Direct/CoT/Few-shot 对照、Train 示例、Dev 校准，以及 Task 2/3 的联合生成、过滤与校准流程；未加入冗长复现命令。

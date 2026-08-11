@@ -51,4 +51,5 @@
   - [x] 严格评测器与官方连续 F1 脚本一致
   - [x] 9 项 unittest、py_compile、Ruff 全部通过
   - [x] 代码、README、测试与汇总指标按安全范围发布 GitHub
+  - [x] README 补充 Direct、CoT、Few-shot、Dev 校准及 Task 2/3 联合推理方法
 - 最终结果：Task 2 test `continuous_F1=0.2869350972`；Task 3 test `continuous_F1=0.2535017417`；`parse_failures=0`。
