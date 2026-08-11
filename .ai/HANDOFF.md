@@ -5,7 +5,7 @@
 - 更新时间：2026-08-11
 - 上一个 Agent：Codex
 - Git：已初始化 `main`，远程公开仓库为 `https://github.com/Chihirodawn/dim-absa`。
-- 状态：Task 1 云端实验、最终 test、结果回传、文档更新与 GitHub 首次发布均已完成。
+- 状态：Task 1、Task 2、Task 3 云端实验、结果回传、文档更新与 GitHub 发布均已完成。
 
 ## 2. 本次完成内容
 
@@ -61,3 +61,13 @@
 - 若发布 GitHub，遵守 README 的发布边界，只提交代码、文档和 `results/metrics.csv`，不提交官方数据、模型权重、原始预测/诊断。
 - 最终检查无 `python`/`python3`/`hf` 进程，GPU 2 MiB、利用率 0%、温度 30°C；仍需在 SeetaCloud 控制台停止或释放实例以停止计费。
 - GitHub 已仅发布代码、测试、文档和 `results/metrics.csv`；官方数据、模型权重、原始预测及诊断仍在 `.gitignore` 中。
+
+## 7. 后续更新（2026-08-11）：Task 2/3 联合抽取
+
+- 新增 `dimabsa_extraction.py`、`dimabsa_extraction_prompts.py`、`run_extraction.py`、`evaluate_extraction.py`、`calibrate_extraction.py`、`repair_extraction.py`。
+- Qwen 一次生成 Task 3 `(Aspect, Category, Opinion, VA)`，程序自动去 Category 派生 Task 2，未重复运行 test。
+- dev 使用官方完整餐厅类别协议；对截断但含完整 item 的输出可安全恢复。最终 dev Task 2/3 continuous F1 为 `0.3719793303` / `0.3120061572`。
+- 冻结 dev 过滤和 V/A 参数后只运行一次 1,000 条 test：Task 2 `continuous_F1=0.2869350972`，Task 3 `continuous_F1=0.2535017417`；官方脚本一致。
+- test 生成 3,549 个原始四元组，过滤校准后 2,883 个；金标准 2,861 个。`parse_failures=0`、`discarded_invalid_items=53`、耗时 918.38 秒、峰值显存 10.44 GiB。
+- 云端最终 GPU 2 MiB、利用率 0%；结果已同步到 `results/extraction_schema_v2/` 与 `results/extraction_final/`，原始 JSON/JSONL 被 Git 忽略。
+- 本地验证：9 项 unittest 通过，`py_compile` 通过，Ruff 通过。Task 2/3 代码、README、测试与汇总指标已按安全范围发布；原始预测和官方数据未上传。

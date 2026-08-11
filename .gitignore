@@ -23,6 +23,8 @@ resources/DimABSA2026/
 # 原始模型输出可能包含官方文本与大量诊断内容，只保留汇总表。
 results/*.jsonl
 results/*.json
+results/**/*.jsonl
+results/**/*.json
 !results/README.md
 !results/metrics.csv
 

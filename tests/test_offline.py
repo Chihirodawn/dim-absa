@@ -20,6 +20,14 @@ from dimabsa_data import (  # noqa: E402
 from calibrate_task1 import calibrate_score, fit_affine  # noqa: E402
 from dimabsa_prompts import build_user_prompt  # noqa: E402
 from run_instruct import parse_model_output  # noqa: E402
+from run_extraction import parse_model_output as parse_extraction_output  # noqa: E402
+from dimabsa_extraction import (  # noqa: E402
+    load_extraction_records,
+    parse_extraction_payload,
+    select_extraction_examples,
+)
+from dimabsa_extraction_prompts import build_extraction_user_prompt  # noqa: E402
+from calibrate_extraction import DEFAULT_UNCERTAIN_VA  # noqa: E402
 
 
 DATA_ROOT = (
@@ -31,6 +39,7 @@ DATA_ROOT = (
     / "subtask_1"
     / "zho"
 )
+EXTRACTION_ROOT = DATA_ROOT.parents[1] / "subtask_3" / "zho"
 
 
 class OfflinePipelineTests(unittest.TestCase):
@@ -110,6 +119,65 @@ class OfflinePipelineTests(unittest.TestCase):
                 path, require_gold=True, require_text=False
             )
             self.assertEqual(records[0].text, "")
+
+    def test_extraction_data_prompt_and_parser(self) -> None:
+        train = load_extraction_records(
+            EXTRACTION_ROOT / "zho_restaurant_train_alltasks.jsonl",
+            require_gold=True,
+        )
+        dev = load_extraction_records(
+            EXTRACTION_ROOT / "zho_restaurant_dev_task3.jsonl",
+            require_gold=True,
+        )
+        self.assertEqual(len(train), 6050)
+        self.assertEqual(len(dev), 300)
+        examples = select_extraction_examples(train, 8)
+        self.assertEqual(len(examples), 8)
+        prompt = build_extraction_user_prompt(
+            dev[0], prompt_mode="fewshot", examples=examples
+        )
+        self.assertIn("Let's think step by step", prompt)
+        self.assertIn("FOOD#QUALITY", prompt)
+        self.assertNotIn('"6.25#5.50"', prompt.split("现在处理新文本：", 1)[1])
+        items, errors = parse_extraction_payload(
+            {
+                "items": [
+                    {
+                        "aspect": "配料",
+                        "opinion": "覺得特別",
+                        "category": "food#quality",
+                        "V": "6.25",
+                        "A": "5.50",
+                    },
+                    {
+                        "aspect": "不存在",
+                        "opinion": "覺得特別",
+                        "category": "FOOD#QUALITY",
+                        "V": 6,
+                        "A": 5,
+                    },
+                ]
+            },
+            dev[0].text,
+        )
+        self.assertEqual(len(items), 1)
+        self.assertEqual(items[0].category, "FOOD#QUALITY")
+        self.assertEqual(len(errors), 1)
+        self.assertEqual(len(DEFAULT_UNCERTAIN_VA), 4)
+
+    def test_truncated_extraction_output_salvages_complete_items(self) -> None:
+        text = "食物很好吃，服務也親切。"
+        truncated = (
+            '{"items":['
+            '{"aspect":"食物","opinion":"很好吃","category":"FOOD#QUALITY",'
+            '"V":"6.50","A":"6.00"},'
+            '{"aspect":"服務","opinion":"親切","category":"SERVICE#GENERAL",'
+            '"V":"6.00"'
+        )
+        items, errors = parse_extraction_output(truncated, text)
+        self.assertEqual(len(items), 1)
+        self.assertEqual(items[0].aspect, "食物")
+        self.assertEqual(errors, [])
 
 
 if __name__ == "__main__":

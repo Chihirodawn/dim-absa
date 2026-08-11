@@ -49,3 +49,25 @@
 - 最终选择：在 dev 上为 V/A 分别拟合 `gold = slope * pred + intercept`，裁剪到 `[1,9]`；比较三种校准 dev RMSE 后锁定 few-shot，再仅应用冻结参数到 test。
 - 选择原因：官方 Task 1 以 RMSE 为主指标；线性校准只修正模型尺度，不使用 test 标签，不训练 Qwen。
 - 验证依据：few-shot dev RMSE 从 1.9836 降至 0.8940；test 从 2.0312 降至 1.1149，并优于 test 均值基线 1.4761。
+
+## DECISION-007：Task 3 一次生成并派生 Task 2
+
+- 日期：2026-08-11
+- 状态：已采用
+- 背景：中文餐厅 Task 2 与 Task 3 的输入 ID、文本和关系数量一致，Task 3 只比 Task 2 多 Category。
+- 最终选择：模型只运行一次 Task 3；程序去掉 Category 并按 Aspect/Opinion 去重后生成 Task 2。
+- 原因：避免对相同 1,000 条 test 重复付费推理，并确保两个任务使用相同的方面与评价边界。
+
+## DECISION-008：抽取任务采用官方完整类别协议与严格原文片段
+
+- 日期：2026-08-11
+- 状态：已采用
+- 最终选择：Category 按官方 Restaurant entity/attribute 组合校验；Aspect 与 Opinion 必须是原文连续片段；非法单项丢弃并记录诊断。
+- 原因：Task 2/3 的结构必须精确匹配；训练集中未出现的组合仍可能是官方合法类别。
+
+## DECISION-009：Dev 冻结抽取过滤与 VA 校准
+
+- 日期：2026-08-11
+- 状态：已采用
+- 最终选择：在 dev 丢弃 Qwen 常用于低置信事实片段的 4 个中心网格分，并对 Task 2 精确匹配关系拟合 V/A 仿射参数；test 只应用冻结规则。
+- 验证依据：最终 dev Task 2/3 continuous F1 分别为 0.3720/0.3120；唯一 test 分别为 0.2869/0.2535。

@@ -38,3 +38,17 @@
 - 仓库：`https://github.com/Chihirodawn/dim-absa`
 - 发布范围：代码、测试、README、依赖、复现脚本、AI 交接与 `results/metrics.csv`。
 - 排除范围：完整官方仓库/数据、模型权重、原始预测、诊断和元数据 JSON/JSONL。
+
+### TASK-004：中文餐厅 Task 2/3 Instruct 联合抽取
+
+- 状态：已完成
+- 完成时间：2026-08-11
+- 完成内容：
+  - [x] 一次 Task 3 四元组生成自动派生 Task 2 三元组，避免重复 GPU 推理
+  - [x] 精确原文片段、官方类别、V/A 范围、去重与截断输出恢复
+  - [x] 8 条 Train few-shot CoT，300 条完整 dev 与 1,000 条唯一 test
+  - [x] Dev 冻结 4 个不确定中心分过滤及 V/A 仿射校准
+  - [x] 严格评测器与官方连续 F1 脚本一致
+  - [x] 9 项 unittest、py_compile、Ruff 全部通过
+  - [x] 代码、README、测试与汇总指标按安全范围发布 GitHub
+- 最终结果：Task 2 test `continuous_F1=0.2869350972`；Task 3 test `continuous_F1=0.2535017417`；`parse_failures=0`。
