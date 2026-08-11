@@ -1,0 +1,30 @@
+.env
+.env.*
+*.key
+*.pem
+
+__pycache__/
+*.py[cod]
+.ruff_cache/
+.venv/
+venv/
+
+logs/
+outputs/
+checkpoints/
+wandb/
+*.pt
+*.pth
+*.ckpt
+
+# 官方数据仅供本地科研实验，不随个人仓库重新分发。
+resources/DimABSA2026/
+
+# 原始模型输出可能包含官方文本与大量诊断内容，只保留汇总表。
+results/*.jsonl
+results/*.json
+!results/README.md
+!results/metrics.csv
+
+.DS_Store
+Thumbs.db

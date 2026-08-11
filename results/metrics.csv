@@ -1,0 +1,11 @@
+date,dataset,model,prompt_mode,run_mode,records,aspects,parse_failures,rmse_va,rmse_va_normalized,pcc_v,pcc_a,elapsed_seconds,peak_cuda_allocated_gib,notes
+2026-08-10,zho_restaurant_dev_task1,train_mean,mean,full,300,685,0,1.2879411511,0.1138389902,,,0.0575263330,0.0,"CPU baseline; constant prediction so PCC is undefined"
+2026-08-11,zho_restaurant_dev_task1,Qwen3-4B-Instruct-2507,direct,full,300,685,0,1.9864848828,0.1755821164,0.7122993231,0.4803092277,37.7876880141,9.3096609116,"Official BF16; Transformers; no format retries"
+2026-08-11,zho_restaurant_dev_task1,Qwen3-4B-Instruct-2507,cot,full,300,685,0,1.9353279961,0.1710604437,0.7077617378,0.4683654214,38.7893809550,9.4164357185,"Official BF16; Let's think step by step; no format retries"
+2026-08-11,zho_restaurant_dev_task1,Qwen3-4B-Instruct-2507,fewshot,full,300,685,0,1.9835888363,0.1753261397,0.7716694350,0.5035823566,58.8040487089,10.6311845779,"Five train anchors; no format retries"
+2026-08-11,zho_restaurant_dev_task1,Qwen3-4B-Instruct-2507,direct_calibrated,full,300,685,0,0.9546792177,0.0843825186,0.7125169525,0.4798614103,,,"Per-dimension affine calibration fit on dev"
+2026-08-11,zho_restaurant_dev_task1,Qwen3-4B-Instruct-2507,cot_calibrated,full,300,685,0,0.9611840326,0.0849574684,0.7079346389,0.4681192544,,,"Per-dimension affine calibration fit on dev"
+2026-08-11,zho_restaurant_dev_task1,Qwen3-4B-Instruct-2507,fewshot_calibrated,full,300,685,0,0.8940462438,0.0790232702,0.7716631545,0.5031690002,,,"Dev-selected final method; per-dimension affine calibration"
+2026-08-11,zho_restaurant_test_task1,train_mean,mean,full,1000,1929,0,1.4761066966,0.1304706319,,,0.0458062091,0.0,"CPU baseline; constant prediction so PCC is undefined"
+2026-08-11,zho_restaurant_test_task1,Qwen3-4B-Instruct-2507,fewshot,full,1000,1929,0,2.0311753244,0.1795322307,0.7745175462,0.4315632712,164.7490702220,10.6131238937,"Only model prompt run on test; selected before test"
+2026-08-11,zho_restaurant_test_task1,Qwen3-4B-Instruct-2507,fewshot_calibrated,full,1000,1929,0,1.1149206501,0.0985459940,0.7745251911,0.4314290922,,,"Final result; dev parameters frozen before test; official script confirmed"
