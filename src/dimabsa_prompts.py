@@ -12,6 +12,10 @@ SYSTEM_PROMPT = """你是维度方面级情感分析（DimABSA）专家。
 你的任务是针对给定的每个方面词分别预测 Valence 和 Arousal，而不是判断整句话的总体情感。
 必须严格遵守用户指定的数值范围、方面顺序和输出格式。"""
 
+ENGLISH_SYSTEM_PROMPT = """You are an expert in dimensional aspect-based sentiment analysis.
+Predict Valence and Arousal separately for every specified aspect, not for the sentence as a whole.
+Follow the requested scale, aspect order, and JSON output format exactly."""
+
 RUBRIC = """评分标准：
 - Valence（V，正负程度）：1=极度负面，3=明显负面，5=中性，7=明显正面，9=极度正面。
 - Arousal（A，激烈程度）：1=非常平静，3=较弱，5=中等，7=强烈，9=极度强烈。
@@ -22,6 +26,18 @@ RUBRIC = """评分标准：
 COT_LINE = (
     "Let's think step by step. 请在内部逐个分析方面对应的评价、正负方向和激烈程度，"
     "但不要输出分析过程。"
+)
+
+ENGLISH_RUBRIC = """Scoring rubric:
+- Valence (V): 1=extremely negative, 3=clearly negative, 5=neutral, 7=clearly positive, 9=extremely positive.
+- Arousal (A): 1=very calm, 3=weak, 5=moderate, 7=strong, 9=extremely intense.
+- Arousal is emotional intensity, not confidence. Calm praise can have high V and low A; intense criticism can have low V and high A.
+- Judge the opinion attached to each aspect. Pay attention to negation, intensifiers, contrast, punctuation, and implicit sentiment.
+- Use the full continuous 1.00--9.00 scale rather than defaulting to integers or a few anchor values."""
+
+ENGLISH_COT_LINE = (
+    "Think step by step internally: identify the aspect-specific opinion, determine its "
+    "polarity and intensity, and then map both to the continuous scale. Do not reveal the reasoning."
 )
 
 
@@ -57,12 +73,13 @@ def build_user_prompt(
 ) -> str:
     """Build direct, CoT, or few-shot-CoT prompts with a shared rubric."""
 
-    if prompt_mode not in {"direct", "cot", "fewshot"}:
+    if prompt_mode not in {"direct", "cot", "fewshot", "dynamic_fewshot"}:
         raise ValueError(f"Unsupported prompt mode: {prompt_mode}")
-    parts = [RUBRIC]
-    if prompt_mode in {"cot", "fewshot"}:
-        parts.append(COT_LINE)
-    if prompt_mode == "fewshot":
+    english = prompt_mode == "dynamic_fewshot"
+    parts = [ENGLISH_RUBRIC if english else RUBRIC]
+    if prompt_mode in {"cot", "fewshot", "dynamic_fewshot"}:
+        parts.append(ENGLISH_COT_LINE if english else COT_LINE)
+    if prompt_mode in {"fewshot", "dynamic_fewshot"}:
         if not examples:
             raise ValueError("fewshot mode requires at least one example")
         example_blocks = []
@@ -70,15 +87,18 @@ def build_user_prompt(
             example_blocks.append(
                 "\n".join(
                     [
-                        f"示例 {index}：",
-                        f"文本：{example.text}",
-                        f"方面词（共 {len(example.aspects)} 项，顺序固定）："
+                        (f"Example {index}:" if english else f"示例 {index}："),
+                        (f"Text: {example.text}" if english else f"文本：{example.text}"),
+                        ((f"Aspects ({len(example.aspects)}, fixed order):") if english else f"方面词（共 {len(example.aspects)} 项，顺序固定）：")
                         + _format_aspects(example),
-                        "正确输出：" + _format_gold(example),
+                        ("Gold output: " if english else "正确输出：") + _format_gold(example),
                     ]
                 )
             )
-        parts.append("下面是同领域标注示例：\n\n" + "\n\n".join(example_blocks))
+        parts.append(
+            ("Here are labeled examples retrieved for their similarity to the new input:\n\n" if english else "下面是同领域标注示例：\n\n")
+            + "\n\n".join(example_blocks)
+        )
     parts.extend(
         [
             "现在预测新样本：",
@@ -98,7 +118,10 @@ def build_messages(
     examples: Sequence[Task1Record] = (),
 ) -> list[dict[str, str]]:
     return [
-        {"role": "system", "content": SYSTEM_PROMPT},
+        {
+            "role": "system",
+            "content": ENGLISH_SYSTEM_PROMPT if prompt_mode == "dynamic_fewshot" else SYSTEM_PROMPT,
+        },
         {
             "role": "user",
             "content": build_user_prompt(

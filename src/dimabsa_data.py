@@ -4,6 +4,8 @@ from __future__ import annotations
 
 import json
 import math
+import re
+from collections import Counter
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Iterable, Sequence
@@ -211,6 +213,75 @@ def select_anchor_examples(
         selected.append(chosen)
         used_ids.add(chosen.record_id)
     return selected
+
+
+_ENGLISH_TOKEN = re.compile(r"[a-z0-9]+(?:'[a-z0-9]+)?")
+
+
+def _retrieval_tokens(record: Task1Record) -> list[str]:
+    """Return answer-free lexical features for English example retrieval."""
+
+    text_tokens = _ENGLISH_TOKEN.findall(record.text.lower())
+    aspect_tokens = [
+        token
+        for aspect in record.aspects
+        for token in _ENGLISH_TOKEN.findall(aspect.lower())
+    ]
+    # Repeating aspect tokens gives the requested target more influence than
+    # generic restaurant words without using any VA label.
+    return text_tokens + aspect_tokens * 3
+
+
+def select_similar_examples(
+    query: Task1Record,
+    records: Sequence[Task1Record],
+    count: int,
+) -> list[Task1Record]:
+    """Select deterministic per-query Train examples using BM25-style overlap."""
+
+    if count < 1:
+        raise ValueError("dynamic few-shot example count must be positive")
+    candidates = [
+        record
+        for record in records
+        if record.gold_scores
+        and record.record_id != query.record_id
+        and len(record.aspects) <= 3
+        and len(record.text) <= 220
+    ]
+    if len(candidates) < count:
+        raise ValueError("Not enough suitable records for dynamic few-shot retrieval")
+
+    query_terms = set(_retrieval_tokens(query))
+    tokenized = [_retrieval_tokens(record) for record in candidates]
+    document_frequency = Counter(
+        term for tokens in tokenized for term in set(tokens) if term in query_terms
+    )
+    average_length = sum(map(len, tokenized)) / len(tokenized)
+
+    def score(item: tuple[Task1Record, list[str]]) -> tuple[float, str]:
+        record, tokens = item
+        frequencies = Counter(tokens)
+        value = 0.0
+        for term in query_terms:
+            frequency = frequencies.get(term, 0)
+            if not frequency:
+                continue
+            frequency_docs = document_frequency[term]
+            inverse_frequency = math.log(
+                1.0 + (len(candidates) - frequency_docs + 0.5) / (frequency_docs + 0.5)
+            )
+            denominator = frequency + 1.5 * (
+                0.25 + 0.75 * len(tokens) / average_length
+            )
+            value += inverse_frequency * frequency * 2.5 / denominator
+        return value, record.record_id
+
+    ranked = sorted(
+        zip(candidates, tokenized),
+        key=lambda item: (-score(item)[0], score(item)[1]),
+    )
+    return [record for record, _ in ranked[:count]]
 
 
 def write_task1_predictions(

@@ -25,8 +25,14 @@ results/*.jsonl
 results/*.json
 results/**/*.jsonl
 results/**/*.json
+results/**/*.txt
+results/**/*.csv
 !results/README.md
 !results/metrics.csv
+!results/extraction_metrics.csv
+!results/paper_track_a_table2.csv
+!results/paper_eng_rest_comparison.csv
 
 .DS_Store
 Thumbs.db
+*.inspect.ndjson

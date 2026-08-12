@@ -72,3 +72,40 @@
 - 云端最终 GPU 2 MiB、利用率 0%；结果已同步到 `results/extraction_schema_v2/` 与 `results/extraction_final/`，原始 JSON/JSONL 被 Git 忽略。
 - 本地验证：9 项 unittest 通过，`py_compile` 通过，Ruff 通过。Task 2/3 代码、README、测试与汇总指标已按安全范围发布；原始预测和官方数据未上传。
 - README 已补充简短实验方法：说明 Task 1 的 Direct/CoT/Few-shot 对照、Train 示例、Dev 校准，以及 Task 2/3 的联合生成、过滤与校准流程；未加入冗长复现命令。
+
+## 8. 后续更新（2026-08-12）：英文 Restaurant Task 1
+
+- 新主机：SeetaCloud RTX 5090 D 32 GB；复用官方 Qwen3-4B-Instruct-2507 BF16 与原有 Transformers 推理代码，没有训练或微调模型。
+- 云端 `/etc/network_turbo` 使权重断点下载由亚 MB/s 提升至约 51–65 MiB/s；三块权重 SHA-256 与旧主机完整副本完全一致。
+- 英文 dev（200 条、340 个方面）校准 RMSE：Direct `1.1717095354`、CoT `1.1722364247`、Few-shot `1.0998732547`；据此冻结 Few-shot 及其 dev 校准参数。
+- 英文 test（1,000 条、1,504 个方面）只运行一次：raw `2.3629920685`，calibrated `1.4511021582`，`PCC_V=0.8070043842`，`PCC_A=0.3900397818`。
+- 官方 SciPy 脚本与项目严格评测器一致；相对 LogSigma 公布的 `1.1035` 高 `0.3476` RMSE，因此未赢。
+- 推理耗时 119.64 秒，峰值 CUDA allocated 10.35 GiB，`parse_failures=0`、`format_retry_recoveries=0`；结果保存在 `results/english/` 并被 Git 忽略，汇总已写入 `results/metrics.csv`。
+- 本次英文结果和交接尚未提交或推送 GitHub；发布前仍需遵守只上传代码、文档和汇总指标的边界。
+
+## 9. 后续更新（2026-08-12）：同模型无训练动态检索与集成
+
+- 新增 `select_similar_examples`：用文本和方面词构造无答案 BM25 风格词法特征，为每条英文输入从 Train 检索 5 条短示例；新增 `dynamic_fewshot` 英文专用提示。
+- 动态单路校准 Dev `RMSE_VA=1.1079851878`，没有直接替代固定 Few-shot；其差异用于四路集成。
+- 冻结方法前按记录 ID 做 5 折分组交叉验证：固定 Few-shot `1.1133`，四路等权 `1.0415`；复杂自由权重未采用。
+- 新增 `src/ensemble_task1.py`，对 Direct/CoT/固定 Few-shot/动态 Few-shot 原始输出各取 25%，再应用 Dev 冻结的 V/A 仿射校准。
+- 完整 Dev `RMSE_VA=1.0262814085`；Test `RMSE_VA=1.3661908335`，`PCC_V=0.8448344992`、`PCC_A=0.5057372064`；V/A RMSE `1.1296`/`0.7685`。
+- 官方与严格脚本一致；补跑 Test 的 Direct/CoT/动态 Few-shot 均 `parse_failures=0`、`format_retry_recoveries=0`，GPU 最终 2 MiB、0%。
+- 本地通过 11 项 unittest、py_compile、Ruff；原始结果位于 `results/english_dynamic/` 和 `results/english_ensemble_test/` 且被 Git 忽略，汇总写入 `results/metrics.csv`。
+- 本次代码、交接和汇总尚未提交或推送 GitHub。
+
+## 10. 后续更新（2026-08-12）：英文 Restaurant 三任务 LoRA
+
+- 新增 `train_task1_lora_regression.py`：Qwen LoRA 特征主干 + V/A 双输出回归头；正式训练在 epoch 1 达到最佳 Dev，随后早停，完整训练 335.14 秒、峰值 CUDA allocated 8.20 GiB。
+- Task 1 最佳检查点 Test raw `1.2859560`，Dev 仿射后 `1.2578152`；按 Dev 冻结的 90% LoRA + 10% 无训练集成最终 `RMSE_VA=1.2420729499`，官方脚本一致。
+- 新增 `train_extraction_lora.py`：Task 2/3 共用 4-bit QLoRA。batch 20、梯度累积 1，epoch 2 最优；完整训练 1630.98 秒、平均 GPU 利用率 93.03%、峰值 CUDA allocated 25.10 GiB。
+- 新增 `calibrate_extraction_affine.py`：英文抽取只做 VA 仿射校准，保留全部预测项。最终 Test Task 2/3 `continuous_F1=0.5396759014` / `0.4962316066`，官方脚本一致，1000 条生成 `parse_failures=0`。
+- 云端最终无训练进程，GPU 0%、2 MiB。两个约 46 MB 的 LoRA 适配器、预测、指标、Dev epoch 输出及 GPU 日志已同步回本地 `outputs/`、`results/`、`logs/`；这些大部分按 `.gitignore` 不发布。
+- 本地验证：13 项 unittest、py_compile 与 Ruff 已通过；正式 GPU smoke、训练、检查点重载和 Test 推理全部通过。当前修改尚未 commit 或 push。
+
+## 11. 后续更新（2026-08-12）：论文数据入库
+
+- 使用用户提供的 `2604.07066v1` 任务总览论文，依据第 4 页 Table 1、第 7 页 Table 2 和第 20–21 页完整排行榜核对数据。
+- 新增 `PAPER_RESULTS.md`：解释数据集缩写、三个任务、RMSE/cF1、英文 Restaurant 对比、LogSigma/Takoyaki 方法及官方基线含义。
+- 新增 `results/paper_track_a_table2.csv`（104 条论文成绩）、`paper_eng_rest_comparison.csv`（15 条论文/本项目对比）和 `paper_results.xlsx`（说明、原始表、对比表）。
+- XLSX 三个工作表均完成渲染检查；CSV 已检查行数、任务分布、唯一性和关键数字。当前修改尚未 commit 或 push。

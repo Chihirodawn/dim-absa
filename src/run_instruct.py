@@ -19,6 +19,7 @@ from dimabsa_data import (
     load_task1_records,
     mean_gold_score,
     select_anchor_examples,
+    select_similar_examples,
     select_smoke_records,
     write_task1_predictions,
 )
@@ -55,7 +56,7 @@ def parse_args() -> argparse.Namespace:
     )
     parser.add_argument(
         "--prompt-mode",
-        choices=["mean", "direct", "cot", "fewshot"],
+        choices=["mean", "direct", "cot", "fewshot", "dynamic_fewshot"],
         default="direct",
     )
     parser.add_argument(
@@ -177,9 +178,19 @@ def _format_prompt_batch(
     *,
     prompt_mode: str,
     examples: Sequence[Task1Record],
+    train_records: Sequence[Task1Record] = (),
+    few_shot_examples: int = 5,
 ) -> list[str]:
     conversations = [
-        build_messages(record, prompt_mode=prompt_mode, examples=examples)
+        build_messages(
+            record,
+            prompt_mode=prompt_mode,
+            examples=(
+                select_similar_examples(record, train_records, few_shot_examples)
+                if prompt_mode == "dynamic_fewshot"
+                else examples
+            ),
+        )
         for record in records
     ]
     return tokenizer.apply_chat_template(
@@ -197,7 +208,11 @@ def _format_retry_prompt(
     examples: Sequence[Task1Record],
     previous_output: str,
     parse_error: str,
+    train_records: Sequence[Task1Record] = (),
+    few_shot_examples: int = 5,
 ) -> str:
+    if prompt_mode == "dynamic_fewshot":
+        examples = select_similar_examples(record, train_records, few_shot_examples)
     messages = build_messages(record, prompt_mode=prompt_mode, examples=examples)
     messages.extend(
         [
@@ -351,6 +366,8 @@ def main() -> None:
                 batch_records,
                 prompt_mode=args.prompt_mode,
                 examples=examples,
+                train_records=train_records,
+                few_shot_examples=args.few_shot_examples,
             )
             raw_outputs = _generate(
                 model,
@@ -404,6 +421,8 @@ def main() -> None:
                             examples=examples,
                             previous_output=current_output,
                             parse_error=str(exc),
+                            train_records=train_records,
+                            few_shot_examples=args.few_shot_examples,
                         )
                         current_output = _generate(
                             model,
@@ -473,7 +492,8 @@ def main() -> None:
         "batch_size": batch_size,
         "max_seq_length": args.max_seq_length,
         "max_new_tokens": args.max_new_tokens,
-        "few_shot_examples": args.few_shot_examples if args.prompt_mode == "fewshot" else 0,
+        "few_shot_examples": args.few_shot_examples if args.prompt_mode in {"fewshot", "dynamic_fewshot"} else 0,
+        "few_shot_retrieval": "per_record_bm25_lexical" if args.prompt_mode == "dynamic_fewshot" else None,
         "elapsed_seconds": time.perf_counter() - started,
         "peak_cuda_allocated_gib": peak_allocated_gib,
         "peak_cuda_reserved_gib": peak_reserved_gib,

@@ -16,8 +16,10 @@ from dimabsa_data import (  # noqa: E402
     load_task1_records,
     mean_gold_score,
     select_anchor_examples,
+    select_similar_examples,
 )
 from calibrate_task1 import calibrate_score, fit_affine  # noqa: E402
+from ensemble_task1 import average_predictions  # noqa: E402
 from dimabsa_prompts import build_user_prompt  # noqa: E402
 from run_instruct import parse_model_output  # noqa: E402
 from run_extraction import parse_model_output as parse_extraction_output  # noqa: E402
@@ -28,6 +30,10 @@ from dimabsa_extraction import (  # noqa: E402
 )
 from dimabsa_extraction_prompts import build_extraction_user_prompt  # noqa: E402
 from calibrate_extraction import DEFAULT_UNCERTAIN_VA  # noqa: E402
+from calibrate_extraction_affine import (  # noqa: E402
+    apply_parameters as apply_extraction_affine,
+    fit_parameters as fit_extraction_affine,
+)
 
 
 DATA_ROOT = (
@@ -66,6 +72,19 @@ class OfflinePipelineTests(unittest.TestCase):
         self.assertEqual(len(examples), 5)
         self.assertEqual(len({example.record_id for example in examples}), 5)
 
+    def test_dynamic_examples_are_query_specific_and_answer_free(self) -> None:
+        query = self.dev[0]
+        examples = select_similar_examples(query, self.train, 5)
+        self.assertEqual(len(examples), 5)
+        self.assertEqual(len({example.record_id for example in examples}), 5)
+        prompt = build_user_prompt(
+            query, prompt_mode="dynamic_fewshot", examples=examples
+        )
+        self.assertIn("retrieved for their similarity", prompt)
+        self.assertIn("Think step by step internally", prompt)
+        gold_v, gold_a = query.gold_scores[0]
+        self.assertNotIn(f"{gold_v:.2f}#{gold_a:.2f}", prompt.split("Now", 1)[-1])
+
     def test_cot_prompt_is_explicit(self) -> None:
         direct = build_user_prompt(self.dev[0], prompt_mode="direct")
         cot = build_user_prompt(self.dev[0], prompt_mode="cot")
@@ -100,6 +119,29 @@ class OfflinePipelineTests(unittest.TestCase):
             "A": {"slope": 0.5, "intercept": 1.0},
         }
         self.assertEqual(calibrate_score((5.0, 2.0), parameters), (9.0, 2.0))
+
+    def test_equal_weight_ensemble(self) -> None:
+        left = [
+            self.dev[0].__class__(
+                self.dev[0].record_id,
+                "",
+                self.dev[0].aspects,
+                tuple((3.0, 5.0) for _ in self.dev[0].aspects),
+            )
+        ]
+        right = [
+            self.dev[0].__class__(
+                self.dev[0].record_id,
+                "",
+                self.dev[0].aspects,
+                tuple((7.0, 9.0) for _ in self.dev[0].aspects),
+            )
+        ]
+        _, averaged = average_predictions([left, right])
+        self.assertEqual(
+            averaged[self.dev[0].record_id],
+            tuple((5.0, 7.0) for _ in self.dev[0].aspects),
+        )
 
     def test_prediction_file_does_not_require_text(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
@@ -178,6 +220,51 @@ class OfflinePipelineTests(unittest.TestCase):
         self.assertEqual(len(items), 1)
         self.assertEqual(items[0].aspect, "食物")
         self.assertEqual(errors, [])
+
+    def test_english_null_extraction_is_opt_in(self) -> None:
+        payload = {
+            "items": [
+                {
+                    "aspect": "NULL",
+                    "opinion": "NULL",
+                    "category": "RESTAURANT#GENERAL",
+                    "V": "6.75",
+                    "A": "6.38",
+                }
+            ]
+        }
+        rejected, errors = parse_extraction_payload(payload, "Can't wait to return")
+        self.assertEqual(rejected, ())
+        self.assertEqual(len(errors), 1)
+        accepted, errors = parse_extraction_payload(
+            payload, "Can't wait to return", allow_null=True
+        )
+        self.assertEqual(len(accepted), 1)
+        self.assertEqual(errors, [])
+
+    def test_extraction_affine_keeps_every_prediction(self) -> None:
+        gold = [
+            {
+                "ID": "one",
+                "Triplet": [
+                    {"Aspect": "food", "Opinion": "great", "VA": "7.00#5.00"}
+                ],
+            }
+        ]
+        prediction = [
+            {
+                "ID": "one",
+                "Triplet": [
+                    {"Aspect": "food", "Opinion": "great", "VA": "5.00#5.00"},
+                    {"Aspect": "staff", "Opinion": "slow", "VA": "3.00#6.00"},
+                ],
+            }
+        ]
+        parameters = fit_extraction_affine(gold, prediction, 2)
+        calibrated = apply_extraction_affine(prediction, parameters, 2)
+        self.assertEqual(parameters["fit_matches"], 1)
+        self.assertEqual(len(calibrated[0]["Triplet"]), 2)
+        self.assertEqual(calibrated[0]["Triplet"][0]["VA"], "7.00#5.00")
 
 
 if __name__ == "__main__":

@@ -1,6 +1,6 @@
 # DimABSA 中文餐厅测试结果
 
-本项目使用 `Qwen3-4B-Instruct-2507` 完成 [DimABSA2026](https://github.com/DimABSA/DimABSA2026) Track A 中文餐厅领域的 Task 1、Task 2 和 Task 3 测试。模型不进行 LoRA 微调或参数训练。
+本项目使用 `Qwen3-4B-Instruct-2507` 完成 [DimABSA2026](https://github.com/DimABSA/DimABSA2026) Track A 的 Task 1、Task 2 和 Task 3。第一阶段是不训练的中文 Instruct 基线；后续在英文 Restaurant 数据上完成了 LoRA 微调。
 
 ## 实验方法
 
@@ -36,6 +36,23 @@ Task 2 从文本中抽取 `(Aspect, Opinion, VA)`；Task 3 进一步抽取 `(Asp
 | Task 3 | **Dev 过滤 + VA 校准** | **0.2719** | **0.2535** |
 
 Task 2/3 完整 Test 推理 `parse_failures=0`，耗时约 15 分 18 秒，峰值显存约 10.44 GiB。项目评测器与官方评测脚本结果一致。
+
+## 英文 Restaurant：LoRA 微调结果
+
+- Task 1 使用同一 Qwen 主干和双输出回归头，同时预测 V/A；LoRA 最优检查点再与无训练集成结果按 Dev 冻结的 `90% / 10%` 合并。
+- Task 2/3 联合进行 4-bit LoRA 微调：模型生成 Task 3 四元组，再按官方 Task 2 模板派生三元组。Dev 只校准 VA 数值，不删除任何抽取项。
+
+| 任务 | 最终方法 | Test 指标 |
+|---|---|---:|
+| Task 1 | LoRA 双头回归 90% + 无训练集成 10% | RMSE_VA **1.2421** |
+| Task 2 | 联合抽取 LoRA + Dev VA 校准 | continuous F1 **0.5397** |
+| Task 3 | 联合抽取 LoRA + Dev VA 校准 | continuous F1 **0.4962** |
+
+Task 2/3 的正式训练使用 batch 20、梯度累积 1，平均 GPU 利用率约 93%，第 2 轮为最佳检查点。三个任务的最终测试均由官方评测脚本复核。
+
+## 论文官方成绩对比
+
+论文 Table 2 的 Track A 数据、指标解释、主要团队方法以及本项目与英文 Restaurant 官方成绩的对比，见 [PAPER_RESULTS.md](PAPER_RESULTS.md)。机器可读数据保存在 `results/paper_track_a_table2.csv` 和 `results/paper_eng_rest_comparison.csv`。
 
 ## 结果说明
 

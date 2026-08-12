@@ -182,7 +182,7 @@ def _parse_score(item: dict[str, Any]) -> Score:
 
 
 def parse_extraction_payload(
-    payload: Any, text: str
+    payload: Any, text: str, *, allow_null: bool = False
 ) -> tuple[tuple[ExtractionItem, ...], list[str]]:
     """Parse and validate model output, discarding only invalid individual items."""
 
@@ -210,9 +210,13 @@ def parse_extraction_payload(
             aspect = aspect.strip()
             opinion = opinion.strip()
             category = category.strip().upper()
-            if aspect not in text:
+            if aspect == "NULL" and not allow_null:
+                raise ValueError("NULL Aspect is not allowed for this dataset")
+            if opinion == "NULL" and not allow_null:
+                raise ValueError("NULL Opinion is not allowed for this dataset")
+            if aspect != "NULL" and aspect not in text:
                 raise ValueError(f"Aspect {aspect!r} is not an exact text span")
-            if opinion not in text:
+            if opinion != "NULL" and opinion not in text:
                 raise ValueError(f"Opinion {opinion!r} is not an exact text span")
             if category not in RESTAURANT_CATEGORIES:
                 raise ValueError(f"illegal restaurant category {category!r}")
