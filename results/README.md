@@ -10,4 +10,4 @@
 
 2026-08-12 完成英文 Restaurant LoRA：Task 1 最终 `RMSE_VA=1.2420729499`；Task 2/3 最终 `continuous_F1=0.5396759014` / `0.4962316066`。原始预测和适配器保存在被 Git 忽略的 `results/*_lora/` 与 `outputs/*_lora_seed42/`，公开汇总分别见 `metrics.csv` 和 `extraction_metrics.csv`。
 
-论文官方数据见 `paper_track_a_table2.csv`，英文 Restaurant 与本项目的直接对比见 `paper_eng_rest_comparison.csv`，可视化工作簿见 `paper_results.xlsx`。字段和指标的中文解释位于仓库根目录 `PAPER_RESULTS.md`。
+论文评测公式、附录计算示例与本项目对应结果见仓库根目录 `PAPER_RESULTS.md`；机器可读汇总见 `evaluation_metrics.csv`。

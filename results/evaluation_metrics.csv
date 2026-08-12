@@ -1,0 +1,30 @@
+source,dataset,task,metric,value,direction,official_final_metric,notes
+paper_example,appendix_c,2_or_3,predicted_relations,4,count,no,Paper Appendix C example
+paper_example,appendix_c,2_or_3,gold_relations,3,count,no,Paper Appendix C example
+paper_example,appendix_c,2_or_3,sum_cTP,1.375,higher,no,Paper Appendix C example
+paper_example,appendix_c,2_or_3,cRecall,0.458,higher,no,Paper Appendix C example
+paper_example,appendix_c,2_or_3,cPrecision,0.344,higher,no,Paper Appendix C example
+paper_example,appendix_c,2_or_3,cF1,0.393,higher,yes,Paper Appendix C example
+this_repo,eng-rest,1,test_instances,1504,count,no,English Restaurant Test
+this_repo,eng-rest,1,RMSE_VA,1.2420729499,lower,yes,Official evaluation script confirmed
+paper_best,eng-rest,1,RMSE_VA,1.1035,lower,yes,Best result reported in paper Table 2
+this_repo,eng-rest,2,gold_relations,2129,count,no,English Restaurant Test
+this_repo,eng-rest,2,predicted_relations,1812,count,no,English Restaurant Test
+this_repo,eng-rest,2,structural_TP,1138,higher,no,Exact Aspect and Opinion match
+this_repo,eng-rest,2,FP,674,lower,no,English Restaurant Test
+this_repo,eng-rest,2,FN,991,lower,no,English Restaurant Test
+this_repo,eng-rest,2,sum_cTP,1063.4313637482,higher,no,VA-weighted continuous true positives
+this_repo,eng-rest,2,cPrecision,0.5868826511,higher,no,Official evaluation script confirmed
+this_repo,eng-rest,2,cRecall,0.4994980572,higher,no,Official evaluation script confirmed
+this_repo,eng-rest,2,cF1,0.5396759014,higher,yes,Official evaluation script confirmed
+paper_best,eng-rest,2,cF1,0.7021,higher,yes,Best result reported in paper Table 2
+this_repo,eng-rest,3,gold_relations,2129,count,no,English Restaurant Test
+this_repo,eng-rest,3,predicted_relations,1857,count,no,English Restaurant Test
+this_repo,eng-rest,3,structural_TP,1058,higher,no,Exact Aspect Category and Opinion match
+this_repo,eng-rest,3,FP,799,lower,no,English Restaurant Test
+this_repo,eng-rest,3,FN,1071,lower,no,English Restaurant Test
+this_repo,eng-rest,3,sum_cTP,988.9895918595,higher,no,VA-weighted continuous true positives
+this_repo,eng-rest,3,cPrecision,0.5325738244,higher,no,Official evaluation script confirmed
+this_repo,eng-rest,3,cRecall,0.4645324527,higher,no,Official evaluation script confirmed
+this_repo,eng-rest,3,cF1,0.4962316066,higher,yes,Official evaluation script confirmed
+paper_best,eng-rest,3,cF1,0.6514,higher,yes,Best result reported in paper Table 2

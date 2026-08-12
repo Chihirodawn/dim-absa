@@ -109,3 +109,9 @@
 - 新增 `PAPER_RESULTS.md`：解释数据集缩写、三个任务、RMSE/cF1、英文 Restaurant 对比、LogSigma/Takoyaki 方法及官方基线含义。
 - 新增 `results/paper_track_a_table2.csv`（104 条论文成绩）、`paper_eng_rest_comparison.csv`（15 条论文/本项目对比）和 `paper_results.xlsx`（说明、原始表、对比表）。
 - XLSX 三个工作表均完成渲染检查；CSV 已检查行数、任务分布、唯一性和关键数字。当前修改尚未 commit 或 push。
+
+## 12. 后续更新（2026-08-12）：收缩为论文评测指标
+
+- 用户澄清老师需要的是论文评测相关数据，不是完整排行榜。
+- `PAPER_RESULTS.md` 现只含 RMSE、VA 距离、cTP、cPrecision、cRecall、cF1、论文附录 C 示例和本项目对应结果。
+- 新增 `results/evaluation_metrics.csv`；删除此前的完整 Track A 表、团队方法、数据集介绍和 XLSX 排行榜。

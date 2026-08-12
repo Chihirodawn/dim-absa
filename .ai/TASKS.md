@@ -94,14 +94,14 @@
   - [x] 适配器、原始预测、指标与 GPU 日志回传本地
 - 结果：Task 1 Test `RMSE_VA=1.2420729499`；Task 2/3 Test `continuous_F1=0.5396759014` / `0.4962316066`。
 
-### TASK-008：论文官方数据入库与中文解释
+### TASK-008：论文评测指标与结果入库
 
 - 状态：已完成
 - 完成时间：2026-08-12
 - 完成内容：
-  - [x] 从论文第 7 页 Table 2 录入 Track A 三任务前两名与两个官方基线，共 104 条成绩
-  - [x] 单独整理英文 Restaurant 论文成绩与本项目三任务结果
-  - [x] 说明数据集缩写、三个任务、RMSE、cF1、V/A 和主要团队方法
+  - [x] 整理论文第 5.1 节的 RMSE、VA 距离、cTP、cPrecision、cRecall、cF1 公式
+  - [x] 录入论文附录 C 的评测计算示例
+  - [x] 列出本项目英文 Restaurant 三任务的正式指标与 Task 2/3 评测明细
   - [x] 明确本项目为比赛结束后的本地实验，不虚构官方名次
-  - [x] 提供 CSV 与格式化 XLSX，并检查数值类型、行数、重复项和公式错误
-- 文件：`PAPER_RESULTS.md`、`results/paper_track_a_table2.csv`、`results/paper_eng_rest_comparison.csv`、`results/paper_results.xlsx`。
+  - [x] 删除与当前要求无关的完整多语言排行榜、团队方法和数据集介绍
+- 文件：`PAPER_RESULTS.md`、`results/evaluation_metrics.csv`。

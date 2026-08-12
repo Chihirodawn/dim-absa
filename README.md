@@ -50,9 +50,9 @@ Task 2/3 完整 Test 推理 `parse_failures=0`，耗时约 15 分 18 秒，峰�
 
 Task 2/3 的正式训练使用 batch 20、梯度累积 1，平均 GPU 利用率约 93%，第 2 轮为最佳检查点。三个任务的最终测试均由官方评测脚本复核。
 
-## 论文官方成绩对比
+## 论文评测指标
 
-论文 Table 2 的 Track A 数据、指标解释、主要团队方法以及本项目与英文 Restaurant 官方成绩的对比，见 [PAPER_RESULTS.md](PAPER_RESULTS.md)。机器可读数据保存在 `results/paper_track_a_table2.csv` 和 `results/paper_eng_rest_comparison.csv`。
+论文使用的 `RMSE_VA`、归一化 VA 距离、`cTP`、`cPrecision`、`cRecall`、`cF1` 公式及本项目对应结果见 [PAPER_RESULTS.md](PAPER_RESULTS.md)。机器可读数据保存在 `results/evaluation_metrics.csv`。
 
 ## 结果说明
 

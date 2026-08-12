@@ -71,7 +71,7 @@ RUN_MODE=full CONFIRM_FULL_RUN=YES /root/miniconda3/bin/python \
 - 英文 LoRA Task 1：双头回归 + Dev 校准 Test `RMSE_VA=1.2578151703`；Dev 冻结的 90% LoRA + 10% 无训练集成最终为 `1.2420729499`。
 - 英文联合 QLoRA Task 2/3：Test `continuous_F1=0.5396759014` / `0.4962316066`，两项平均 `0.5179537540`，官方脚本一致，生成 `parse_failures=0`。
 - Task 2/3 正式训练 batch 20、梯度累积 1，最佳 epoch 2；训练约 27.18 分钟，平均 GPU 利用率 93.03%，峰值 CUDA allocated 25.10 GiB。
-- 已录入论文 Table 2 的 104 条 Track A 官方成绩，并提供英文 Restaurant 对比表、XLSX 和中文指标说明；本项目结果明确标记为赛后本地实验。
+- 已按论文第 5.1 节与附录 C 整理论文正式评测指标、公式、示例值和本项目对应结果；完整多语言排行榜已从仓库移除。
 
 ## 7. 重要约束
 
@@ -88,4 +88,4 @@ RUN_MODE=full CONFIRM_FULL_RUN=YES /root/miniconda3/bin/python \
 - 2026-08-12：只复用原 Qwen Instruct 方法完成英文餐厅 Task 1；dev 选 Few-shot + calibration，test RMSE 1.4511021582；结果已回传但尚未发布 GitHub。
 - 2026-08-12：在不训练、不换模型下加入动态 Train 示例检索和四路等权集成；冻结前 5 折 CV 验证提升，最终 test RMSE 1.3661908335；结果已回传但尚未发布 GitHub。
 - 2026-08-12：完成英文 Restaurant 三任务 LoRA；Task 1 RMSE 1.2421，Task 2/3 连续 F1 0.5397/0.4962；适配器、结果和 GPU 日志已回传，尚未发布 GitHub。
-- 2026-08-12：将任务总览论文 Table 2 的 Track A 官方数据及本项目英文 Restaurant 对比录入仓库；新增 CSV、XLSX 与中文解释，尚未发布 GitHub。
+- 2026-08-12：将论文内容收缩为正式评测指标与结果：RMSE、VA 距离、cTP、cPrecision、cRecall、cF1；移除无关的完整多语言排行榜。
