@@ -18,21 +18,42 @@ from dimabsa_data import (  # noqa: E402
     select_anchor_examples,
     select_similar_examples,
 )
-from calibrate_task1 import calibrate_score, fit_affine  # noqa: E402
+from calibrate_task1 import (  # noqa: E402
+    calibrate_score,
+    fit_affine,
+    fit_ridge,
+    select_ridge,
+)
 from ensemble_task1 import average_predictions  # noqa: E402
 from dimabsa_prompts import build_user_prompt  # noqa: E402
 from run_instruct import parse_model_output  # noqa: E402
 from run_extraction import parse_model_output as parse_extraction_output  # noqa: E402
 from dimabsa_extraction import (  # noqa: E402
+    ExtractionItem,
+    ExtractionRecord,
     load_extraction_records,
     parse_extraction_payload,
     select_extraction_examples,
+)
+from extraction_hybrid import (  # noqa: E402
+    BM25Retriever,
+    recover_exact_span,
+    relation_label,
+    vote_prediction_files,
+    write_relation_dataset,
 )
 from dimabsa_extraction_prompts import build_extraction_user_prompt  # noqa: E402
 from calibrate_extraction import DEFAULT_UNCERTAIN_VA  # noqa: E402
 from calibrate_extraction_affine import (  # noqa: E402
     apply_parameters as apply_extraction_affine,
     fit_parameters as fit_extraction_affine,
+)
+from encoder_experiment_utils import (  # noqa: E402
+    balanced_weight_values,
+    load_train_examples,
+    opinion_spans,
+    split_oof,
+    stable_fold,
 )
 
 
@@ -120,6 +141,21 @@ class OfflinePipelineTests(unittest.TestCase):
         }
         self.assertEqual(calibrate_score((5.0, 2.0), parameters), (9.0, 2.0))
 
+    def test_grouped_ridge_calibration(self) -> None:
+        predicted = [1.0, 2.0, 3.0, 4.0, 5.0, 6.0]
+        gold = [3.0, 5.0, 7.0, 9.0, 11.0, 13.0]
+        groups = ["a", "a", "b", "b", "c", "c"]
+        slope, intercept = fit_ridge(predicted, gold, alpha=0.0)
+        self.assertAlmostEqual(slope, 2.0)
+        self.assertAlmostEqual(intercept, 1.0)
+        slope, intercept, alpha, scores = select_ridge(
+            predicted, gold, groups, [0.0, 0.1, 1.0], folds=3
+        )
+        self.assertEqual(alpha, 0.0)
+        self.assertAlmostEqual(slope, 2.0)
+        self.assertAlmostEqual(intercept, 1.0)
+        self.assertEqual(set(scores), {"0.0", "0.1", "1.0"})
+
     def test_equal_weight_ensemble(self) -> None:
         left = [
             self.dev[0].__class__(
@@ -142,6 +178,38 @@ class OfflinePipelineTests(unittest.TestCase):
             averaged[self.dev[0].record_id],
             tuple((5.0, 7.0) for _ in self.dev[0].aspects),
         )
+
+    def test_encoder_training_examples_and_opinion_spans(self) -> None:
+        records, examples = load_train_examples(
+            DATA_ROOT / "zho_restaurant_train_alltasks.jsonl"
+        )
+        self.assertEqual(len(records), len(self.train))
+        self.assertEqual(len(examples), sum(len(record.aspects) for record in records))
+        explicit = next(example for example in examples if example.opinion != "NULL")
+        spans = opinion_spans(explicit.text, explicit.opinion)
+        self.assertTrue(spans)
+        self.assertEqual(
+            explicit.text[spans[0][0] : spans[0][1]].lower(), explicit.opinion.lower()
+        )
+        self.assertEqual(opinion_spans(explicit.text, "NULL"), [])
+
+    def test_encoder_oof_is_grouped_and_sampling_is_balanced(self) -> None:
+        records, examples = load_train_examples(
+            DATA_ROOT / "zho_restaurant_train_alltasks.jsonl"
+        )
+        train_records, train_examples, valid_records, valid_examples = split_oof(
+            records, examples, folds=3, fold=0
+        )
+        train_ids = {record.record_id for record in train_records}
+        valid_ids = {record.record_id for record in valid_records}
+        self.assertFalse(train_ids & valid_ids)
+        self.assertEqual(train_ids, {example.record_id for example in train_examples})
+        self.assertEqual(valid_ids, {example.record_id for example in valid_examples})
+        self.assertTrue(all(stable_fold(record_id, 3) == 0 for record_id in valid_ids))
+        weights = balanced_weight_values(examples)
+        self.assertEqual(len(weights), len(examples))
+        self.assertAlmostEqual(sum(weights) / len(weights), 1.0)
+        self.assertGreater(max(weights), min(weights))
 
     def test_prediction_file_does_not_require_text(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
@@ -265,6 +333,108 @@ class OfflinePipelineTests(unittest.TestCase):
         self.assertEqual(parameters["fit_matches"], 1)
         self.assertEqual(len(calibrated[0]["Triplet"]), 2)
         self.assertEqual(calibrated[0]["Triplet"][0]["VA"], "7.00#5.00")
+
+    def test_bm25_retrieval_and_span_recovery(self) -> None:
+        records = [
+            ExtractionRecord(
+                "food",
+                "The pizza was delicious.",
+                (ExtractionItem("pizza", "delicious", "FOOD#QUALITY", (8.0, 6.0)),),
+            ),
+            ExtractionRecord(
+                "service",
+                "The waiter was painfully slow.",
+                (ExtractionItem("waiter", "slow", "SERVICE#GENERAL", (2.0, 7.0)),),
+            ),
+        ]
+        for variant in ("word", "bigram", "trigram"):
+            selected = BM25Retriever(records, variant).select(
+                "Service was slow.", 1
+            )
+            self.assertEqual(selected[0].record_id, "service")
+        self.assertEqual(recover_exact_span("The Service was slow.", "service"), "Service")
+        self.assertIsNone(recover_exact_span("The service was slow.", "waiter"))
+
+    def test_relation_conversion_and_structure_vote(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            template = root / "template.jsonl"
+            template.write_text(
+                json.dumps(
+                    {
+                        "ID": "one",
+                        "Text": "The Service was painfully slow.",
+                        "Quadruplet": [
+                            {
+                                "Aspect": "Service",
+                                "Category": "SERVICE#GENERAL",
+                                "Opinion": "slow",
+                                "VA": "2.00#7.00",
+                            }
+                        ],
+                    }
+                )
+                + "\n",
+                encoding="utf-8",
+            )
+            views = []
+            for index, opinion in enumerate(("slow", "slow", "painfully slow")):
+                path = root / f"view{index}.jsonl"
+                path.write_text(
+                    json.dumps(
+                        {
+                            "ID": "one",
+                            "Quadruplet": [
+                                {
+                                    "Aspect": "service",
+                                    "Category": "SERVICE#GENERAL",
+                                    "Opinion": opinion,
+                                    "VA": f"{2 + index:.2f}#7.00",
+                                }
+                            ],
+                        }
+                    )
+                    + "\n",
+                    encoding="utf-8",
+                )
+                views.append(path)
+            task2_template = root / "task2_template.jsonl"
+            task2_template.write_text(
+                json.dumps(
+                    {
+                        "ID": "task2-one",
+                        "Text": "The Service was painfully slow.",
+                        "Triplet": [
+                            {
+                                "Aspect": "Service",
+                                "Opinion": "slow",
+                                "VA": "2.00#7.00",
+                            }
+                        ],
+                    }
+                )
+                + "\n",
+                encoding="utf-8",
+            )
+            task2, task3 = root / "task2.jsonl", root / "task3.jsonl"
+            result = vote_prediction_files(
+                template, views, 2, task3, task2, task2_template
+            )
+            self.assertEqual(result["retained_relations"], 1)
+            output = json.loads(task3.read_text(encoding="utf-8"))
+            self.assertEqual(output["Quadruplet"][0]["Aspect"], "Service")
+            self.assertEqual(output["Quadruplet"][0]["VA"], "2.50#7.00")
+            task2_output = json.loads(task2.read_text(encoding="utf-8"))
+            self.assertEqual(task2_output["ID"], "task2-one")
+            relation_path = root / "relations.jsonl"
+            self.assertEqual(
+                write_relation_dataset(template, relation_path, "task1"), 1
+            )
+            relation = json.loads(relation_path.read_text(encoding="utf-8"))
+            self.assertEqual(
+                relation["Aspect_VA"][0]["Aspect"],
+                relation_label("Service", "slow"),
+            )
 
 
 if __name__ == "__main__":

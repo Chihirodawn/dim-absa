@@ -49,7 +49,7 @@ class ExtractionRecord:
 
 
 def load_extraction_records(
-    path: str | Path, *, require_gold: bool = False
+    path: str | Path, *, require_gold: bool = False, require_text: bool = True
 ) -> list[ExtractionRecord]:
     """Load Task 2/3 JSONL; shared train files use the Task 3 schema."""
 
@@ -67,12 +67,12 @@ def load_extraction_records(
             if not isinstance(row, dict):
                 raise ValueError(f"{source}:{line_number}: expected a JSON object")
             record_id = row.get("ID")
-            text = row.get("Text")
+            text = row.get("Text", "")
             if not isinstance(record_id, str) or not record_id:
                 raise ValueError(f"{source}:{line_number}: missing non-empty ID")
             if record_id in seen_ids:
                 raise ValueError(f"{source}:{line_number}: duplicate ID {record_id!r}")
-            if not isinstance(text, str) or not text:
+            if not isinstance(text, str) or (require_text and not text):
                 raise ValueError(f"{source}:{line_number}: missing non-empty Text")
 
             raw_items = row.get("Quadruplet", row.get("Triplet"))

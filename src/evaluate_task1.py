@@ -58,6 +58,8 @@ def evaluate(
     pred_v: list[float] = []
     pred_a: list[float] = []
     squared_error = 0.0
+    squared_error_v = 0.0
+    squared_error_a = 0.0
     aspect_count = 0
     for prediction in pred_records:
         gold = gold_by_id[prediction.record_id]
@@ -73,6 +75,8 @@ def evaluate(
             pred_v.append(pv)
             pred_a.append(pa)
             squared_error += (pv - gv) ** 2 + (pa - ga) ** 2
+            squared_error_v += (pv - gv) ** 2
+            squared_error_a += (pa - ga) ** 2
             aspect_count += 1
     if aspect_count == 0:
         raise ValueError("No aspects were evaluated")
@@ -83,6 +87,8 @@ def evaluate(
         "coverage": len(pred_records) / len(gold_records),
         "PCC_V": _pearson(pred_v, gold_v),
         "PCC_A": _pearson(pred_a, gold_a),
+        "RMSE_V": math.sqrt(squared_error_v / aspect_count),
+        "RMSE_A": math.sqrt(squared_error_a / aspect_count),
         "RMSE_VA": rmse,
         "RMSE_VA_NORMALIZED": rmse / math.sqrt(128),
     }

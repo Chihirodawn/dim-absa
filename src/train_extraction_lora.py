@@ -32,6 +32,7 @@ from dimabsa_extraction import (
     write_extraction_predictions,
 )
 from evaluate_extraction import evaluate
+from extraction_hybrid import BM25Retriever, recover_payload_spans
 
 
 SYSTEM = """You extract dimensional aspect sentiment quadruplets from restaurant reviews.
@@ -67,6 +68,24 @@ def gold_answer(record: ExtractionRecord) -> str:
     return json.dumps({"items": items}, ensure_ascii=False, separators=(",", ":"))
 
 
+def prompt_messages(
+    record: ExtractionRecord,
+    examples: list[ExtractionRecord] | None = None,
+) -> list[dict[str, str]]:
+    """Build optional retrieval demonstrations without exposing query labels."""
+
+    messages = [{"role": "system", "content": SYSTEM}]
+    for example in examples or []:
+        messages.extend(
+            [
+                {"role": "user", "content": user_prompt(example.text)},
+                {"role": "assistant", "content": gold_answer(example)},
+            ]
+        )
+    messages.append({"role": "user", "content": user_prompt(record.text)})
+    return messages
+
+
 class ExtractionSFTDataset(Dataset):
     def __init__(
         self,
@@ -77,10 +96,7 @@ class ExtractionSFTDataset(Dataset):
     ) -> None:
         self.items = []
         for record in records:
-            messages = [
-                {"role": "system", "content": SYSTEM},
-                {"role": "user", "content": user_prompt(record.text)},
-            ]
+            messages = prompt_messages(record)
             prompt = tokenizer.apply_chat_template(
                 messages, tokenize=False, add_generation_prompt=True
             )
@@ -141,7 +157,9 @@ def seed_everything(seed: int) -> None:
     torch.cuda.manual_seed_all(seed)
 
 
-def load_quantized_base(model_name: str, *, train: bool):
+def load_quantized_base(
+    model_name: str, *, train: bool, lora_scope: str = "attention"
+):
     quantization = BitsAndBytesConfig(
         load_in_4bit=True,
         bnb_4bit_quant_type="nf4",
@@ -156,6 +174,11 @@ def load_quantized_base(model_name: str, *, train: bool):
     )
     model.config.use_cache = not train
     if train:
+        target_modules = ["q_proj", "k_proj", "v_proj", "o_proj"]
+        if lora_scope == "attention_mlp":
+            target_modules.extend(["gate_proj", "up_proj", "down_proj"])
+        elif lora_scope != "attention":
+            raise ValueError("lora_scope must be attention or attention_mlp")
         model = prepare_model_for_kbit_training(
             model, use_gradient_checkpointing=True
         )
@@ -166,7 +189,7 @@ def load_quantized_base(model_name: str, *, train: bool):
                 r=16,
                 lora_alpha=32,
                 lora_dropout=0.05,
-                target_modules=["q_proj", "k_proj", "v_proj", "o_proj"],
+                target_modules=target_modules,
                 bias="none",
             ),
         )
@@ -191,7 +214,9 @@ def parse_generation(text: str, source_text: str) -> tuple[ExtractionItem, ...]:
     for candidate in reversed(_json_candidates(text)):
         try:
             items, _ = parse_extraction_payload(
-                candidate, source_text, allow_null=True
+                recover_payload_spans(candidate, source_text),
+                source_text,
+                allow_null=True,
             )
             return items
         except ValueError:
@@ -208,21 +233,27 @@ def generate_predictions(
     batch_size: int,
     max_input_length: int,
     max_new_tokens: int,
+    examples_by_id: dict[str, list[ExtractionRecord]] | None = None,
+    temperature: float = 0.0,
+    diagnostics_path: str | Path | None = None,
 ) -> tuple[dict[str, tuple[ExtractionItem, ...]], int]:
     model.eval()
     previous_padding_side = tokenizer.padding_side
+    previous_truncation_side = tokenizer.truncation_side
     tokenizer.padding_side = "left"
+    tokenizer.truncation_side = "left"
     predictions = {}
     failures = 0
+    diagnostics = []
     order = sorted(range(len(records)), key=lambda index: len(records[index].text), reverse=True)
     for start in range(0, len(order), batch_size):
         batch_records = [records[index] for index in order[start : start + batch_size]]
         prompts = [
             tokenizer.apply_chat_template(
-                [
-                    {"role": "system", "content": SYSTEM},
-                    {"role": "user", "content": user_prompt(record.text)},
-                ],
+                prompt_messages(
+                    record,
+                    None if examples_by_id is None else examples_by_id[record.record_id],
+                ),
                 tokenize=False,
                 add_generation_prompt=True,
             )
@@ -236,21 +267,38 @@ def generate_predictions(
             max_length=max_input_length,
         ).to(model.device)
         width = encoded["input_ids"].shape[1]
-        generated = model.generate(
-            **encoded,
-            max_new_tokens=max_new_tokens,
-            do_sample=False,
-            use_cache=True,
-            pad_token_id=tokenizer.pad_token_id,
-            eos_token_id=tokenizer.eos_token_id,
-        )
+        generation_args = {
+            "max_new_tokens": max_new_tokens,
+            "do_sample": temperature > 0.0,
+            "use_cache": True,
+            "pad_token_id": tokenizer.pad_token_id,
+            "eos_token_id": tokenizer.eos_token_id,
+        }
+        if temperature > 0.0:
+            generation_args["temperature"] = temperature
+        generated = model.generate(**encoded, **generation_args)
         texts = tokenizer.batch_decode(generated[:, width:], skip_special_tokens=True)
         for record, text in zip(batch_records, texts):
             items = parse_generation(text, record.text)
             if not _json_candidates(text):
                 failures += 1
             predictions[record.record_id] = items
+            diagnostics.append(
+                {
+                    "ID": record.record_id,
+                    "raw_output": text,
+                    "parsed_items": len(items),
+                    "has_json_candidate": bool(_json_candidates(text)),
+                }
+            )
     tokenizer.padding_side = previous_padding_side
+    tokenizer.truncation_side = previous_truncation_side
+    if diagnostics_path is not None:
+        destination = Path(diagnostics_path)
+        destination.parent.mkdir(parents=True, exist_ok=True)
+        with destination.open("w", encoding="utf-8") as handle:
+            for row in diagnostics:
+                handle.write(json.dumps(row, ensure_ascii=False) + "\n")
     return predictions, failures
 
 
@@ -329,7 +377,23 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--eval-batch-size", type=int, default=16)
     parser.add_argument("--learning-rate", type=float, default=2e-4)
     parser.add_argument("--max-length", type=int, default=512)
+    parser.add_argument("--max-input-length", type=int, default=512)
     parser.add_argument("--max-new-tokens", type=int, default=384)
+    parser.add_argument("--retrieval-train-file")
+    parser.add_argument("--retrieval-map-file")
+    parser.add_argument("--retrieval-k", type=int, default=0)
+    parser.add_argument(
+        "--retrieval-variant",
+        choices=("word", "bigram", "trigram"),
+        default="word",
+    )
+    parser.add_argument("--temperature", type=float, default=0.0)
+    parser.add_argument("--diagnostics")
+    parser.add_argument(
+        "--lora-scope",
+        choices=("attention", "attention_mlp"),
+        default="attention",
+    )
     parser.add_argument("--seed", type=int, default=42)
     return parser.parse_args()
 
@@ -350,6 +414,16 @@ def check_args(args: argparse.Namespace) -> None:
         )
     ):
         raise ValueError("Prediction requires input and Task 2/3 outputs")
+    if args.retrieval_map_file and not args.retrieval_train_file:
+        raise ValueError("A retrieval map still requires --retrieval-train-file")
+    if args.retrieval_map_file and args.retrieval_k:
+        raise ValueError("Use either --retrieval-map-file or --retrieval-k, not both")
+    if not args.retrieval_map_file and (
+        (args.retrieval_k > 0) != bool(args.retrieval_train_file)
+    ):
+        raise ValueError("BM25 retrieval requires both --retrieval-k and --retrieval-train-file")
+    if args.temperature < 0:
+        raise ValueError("temperature cannot be negative")
 
 
 def main() -> None:
@@ -366,6 +440,32 @@ def main() -> None:
 
     if args.mode == "predict":
         records = load_extraction_records(args.input_file, require_gold=True)
+        examples_by_id = None
+        if args.retrieval_k or args.retrieval_map_file:
+            retrieval_records = load_extraction_records(
+                args.retrieval_train_file, require_gold=True
+            )
+            if args.retrieval_map_file:
+                payload = json.loads(Path(args.retrieval_map_file).read_text())
+                selections = payload.get("selections", payload)
+                train_by_id = {record.record_id: record for record in retrieval_records}
+                missing = [record.record_id for record in records if record.record_id not in selections]
+                if missing:
+                    raise ValueError(f"Retrieval map misses query IDs: {missing[:5]}")
+                examples_by_id = {}
+                for record in records:
+                    selected_ids = selections[record.record_id]
+                    if not selected_ids or any(key not in train_by_id for key in selected_ids):
+                        raise ValueError(f"Invalid retrieval selection for {record.record_id!r}")
+                    examples_by_id[record.record_id] = [train_by_id[key] for key in selected_ids]
+            else:
+                retriever = BM25Retriever(retrieval_records, args.retrieval_variant)
+                examples_by_id = {
+                    record.record_id: retriever.select(
+                        record.text, args.retrieval_k, exclude_id=record.record_id
+                    )
+                    for record in records
+                }
         base = load_quantized_base(args.model_name, train=False)
         model = PeftModel.from_pretrained(base, args.adapter_dir)
         predictions, failures = generate_predictions(
@@ -373,8 +473,11 @@ def main() -> None:
             tokenizer,
             records,
             batch_size=args.eval_batch_size,
-            max_input_length=512,
+            max_input_length=args.max_input_length,
             max_new_tokens=args.max_new_tokens,
+            examples_by_id=examples_by_id,
+            temperature=args.temperature,
+            diagnostics_path=args.diagnostics,
         )
         write_extraction_predictions(records, predictions, args.output_task3)
         task2_records = load_extraction_records(
@@ -393,7 +496,21 @@ def main() -> None:
             task2_records, task2_predictions, dummy, args.output_task2
         )
         dummy.unlink()
-        print(json.dumps({"records": len(records), "parse_failures": failures}))
+        print(
+            json.dumps(
+                {
+                    "records": len(records),
+                    "parse_failures": failures,
+                    "retrieval_k": (
+                        len(next(iter(examples_by_id.values()))) if examples_by_id else 0
+                    ),
+                    "retrieval_variant": (
+                        "map" if args.retrieval_map_file else args.retrieval_variant
+                    ),
+                    "temperature": args.temperature,
+                }
+            )
+        )
         return
 
     train_records = load_extraction_records(args.train_file, require_gold=True)
@@ -410,7 +527,9 @@ def main() -> None:
         collate_fn=SFTCollator(tokenizer),
         num_workers=0,
     )
-    model = load_quantized_base(args.model_name, train=True)
+    model = load_quantized_base(
+        args.model_name, train=True, lora_scope=args.lora_scope
+    )
     trainable = [parameter for parameter in model.parameters() if parameter.requires_grad]
     optimizer = torch.optim.AdamW(trainable, lr=args.learning_rate, weight_decay=0.01)
     total_updates = math.ceil(len(loader) / args.grad_accum) * epochs
@@ -484,6 +603,7 @@ def main() -> None:
     summary = {
         "mode": args.mode,
         "seed": args.seed,
+        "lora_scope": args.lora_scope,
         "best_mean_continuous_f1": best_score,
         "history": history,
         "elapsed_seconds": time.time() - started,

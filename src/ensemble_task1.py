@@ -7,7 +7,7 @@ import json
 from pathlib import Path
 from typing import Sequence
 
-from calibrate_task1 import calibrate_score, fit_affine
+from calibrate_task1 import _fit_parameters, calibrate_score
 from dimabsa_data import Score, Task1Record, load_task1_records, write_task1_predictions
 
 
@@ -51,29 +51,21 @@ def average_predictions(
 def fit_parameters(
     gold: Sequence[Task1Record],
     averaged_records: Sequence[Task1Record],
+    *,
+    method: str = "affine",
+    ridge_alphas: Sequence[float] = (0.0, 0.01, 0.1, 1.0, 10.0),
+    folds: int = 3,
 ) -> dict:
-    _validate_alignment(gold, averaged_records)
-    gold_v: list[float] = []
-    gold_a: list[float] = []
-    pred_v: list[float] = []
-    pred_a: list[float] = []
-    for target, prediction in zip(gold, averaged_records):
-        if target.gold_scores is None or prediction.gold_scores is None:
-            raise ValueError("Gold and predictions must contain VA scores")
-        for (gv, ga), (pv, pa) in zip(target.gold_scores, prediction.gold_scores):
-            gold_v.append(gv)
-            gold_a.append(ga)
-            pred_v.append(pv)
-            pred_a.append(pa)
-    slope_v, intercept_v = fit_affine(pred_v, gold_v)
-    slope_a, intercept_a = fit_affine(pred_a, gold_a)
-    return {
-        "method": "equal_weight_raw_ensemble_then_dev_affine_clip_1_9",
-        "ensemble_size": 0,
-        "aspects": len(gold_v),
-        "V": {"slope": slope_v, "intercept": intercept_v},
-        "A": {"slope": slope_a, "intercept": intercept_a},
-    }
+    parameters = _fit_parameters(
+        gold,
+        averaged_records,
+        method=method,
+        ridge_alphas=ridge_alphas,
+        folds=folds,
+    )
+    parameters["method"] = f"equal_weight_raw_ensemble_then_{parameters['method']}"
+    parameters["ensemble_size"] = 0
+    return parameters
 
 
 def _load_ensemble(paths: Sequence[str]) -> tuple[list[Task1Record], dict[str, tuple[Score, ...]]]:
@@ -91,6 +83,14 @@ def parse_args() -> argparse.Namespace:
     fit_parser.add_argument("--pred", nargs="+", required=True)
     fit_parser.add_argument("--output-params", required=True)
     fit_parser.add_argument("--output-pred", required=True)
+    fit_parser.add_argument("--calibration", choices=["affine", "ridge"], default="affine")
+    fit_parser.add_argument(
+        "--ridge-alphas",
+        type=float,
+        nargs="+",
+        default=[0.0, 0.01, 0.1, 1.0, 10.0],
+    )
+    fit_parser.add_argument("--folds", type=int, default=3)
     apply_parser = subparsers.add_parser("apply")
     apply_parser.add_argument("--pred", nargs="+", required=True)
     apply_parser.add_argument("--params", required=True)
@@ -107,7 +107,13 @@ def main() -> None:
     )
     if args.command == "fit":
         gold = load_task1_records(args.gold, require_gold=True)
-        parameters = fit_parameters(gold, averaged_records)
+        parameters = fit_parameters(
+            gold,
+            averaged_records,
+            method=args.calibration,
+            ridge_alphas=args.ridge_alphas,
+            folds=args.folds,
+        )
         parameters["ensemble_size"] = len(args.pred)
         parameters["prediction_files"] = [Path(path).name for path in args.pred]
         destination = Path(args.output_params)
