@@ -8,23 +8,36 @@ paper_example,appendix_c,2_or_3,cF1,0.393,higher,yes,Paper Appendix C example
 this_repo,eng-rest,1,test_instances,1504,count,no,English Restaurant Test
 this_repo,eng-rest,1,RMSE_VA,1.2420729499,lower,yes,Official evaluation script confirmed
 paper_best,eng-rest,1,RMSE_VA,1.1035,lower,yes,Best result reported in paper Table 2
+paper_second,eng-rest,1,RMSE_VA,1.1812,lower,yes,Second result reported in paper Table 2
+paper_baseline_kimik2,eng-rest,1,RMSE_VA,2.1461,lower,yes,Official baseline reported in paper Table 2
+paper_baseline_qwen3_14b,eng-rest,1,RMSE_VA,2.6427,lower,yes,Official baseline reported in paper Table 2
 this_repo,eng-rest,2,gold_relations,2129,count,no,English Restaurant Test
-this_repo,eng-rest,2,predicted_relations,1812,count,no,English Restaurant Test
-this_repo,eng-rest,2,structural_TP,1138,higher,no,Exact Aspect and Opinion match
-this_repo,eng-rest,2,FP,674,lower,no,English Restaurant Test
-this_repo,eng-rest,2,FN,991,lower,no,English Restaurant Test
-this_repo,eng-rest,2,sum_cTP,1063.4313637482,higher,no,VA-weighted continuous true positives
-this_repo,eng-rest,2,cPrecision,0.5868826511,higher,no,Official evaluation script confirmed
-this_repo,eng-rest,2,cRecall,0.4994980572,higher,no,Official evaluation script confirmed
-this_repo,eng-rest,2,cF1,0.5396759014,higher,yes,Official evaluation script confirmed
+this_repo,eng-rest,2,predicted_relations,1962,count,no,English Restaurant Test
+this_repo,eng-rest,2,structural_TP,1351,higher,no,Exact Aspect and Opinion match
+this_repo,eng-rest,2,FP,611,lower,no,English Restaurant Test
+this_repo,eng-rest,2,FN,778,lower,no,English Restaurant Test
+this_repo,eng-rest,2,sum_cTP,1261.2094882487,higher,no,VA-weighted continuous true positives
+this_repo,eng-rest,2,cPrecision,0.6428182917,higher,no,Official evaluation script confirmed
+this_repo,eng-rest,2,cRecall,0.5923952505,higher,no,Official evaluation script confirmed
+this_repo,eng-rest,2,cF1,0.6165776036,higher,yes,Official evaluation script confirmed
 paper_best,eng-rest,2,cF1,0.7021,higher,yes,Best result reported in paper Table 2
+paper_second,eng-rest,2,cF1,0.6985,higher,yes,Second result reported in paper Table 2
+paper_baseline_kimik2,eng-rest,2,cF1,0.4920,higher,yes,Official baseline reported in paper Table 2
+paper_baseline_qwen3_14b,eng-rest,2,cF1,0.4483,higher,yes,Official baseline reported in paper Table 2
 this_repo,eng-rest,3,gold_relations,2129,count,no,English Restaurant Test
-this_repo,eng-rest,3,predicted_relations,1857,count,no,English Restaurant Test
-this_repo,eng-rest,3,structural_TP,1058,higher,no,Exact Aspect Category and Opinion match
-this_repo,eng-rest,3,FP,799,lower,no,English Restaurant Test
-this_repo,eng-rest,3,FN,1071,lower,no,English Restaurant Test
-this_repo,eng-rest,3,sum_cTP,988.9895918595,higher,no,VA-weighted continuous true positives
-this_repo,eng-rest,3,cPrecision,0.5325738244,higher,no,Official evaluation script confirmed
-this_repo,eng-rest,3,cRecall,0.4645324527,higher,no,Official evaluation script confirmed
-this_repo,eng-rest,3,cF1,0.4962316066,higher,yes,Official evaluation script confirmed
+this_repo,eng-rest,3,predicted_relations,1977,count,no,English Restaurant Test
+this_repo,eng-rest,3,structural_TP,1261,higher,no,Exact Aspect Category and Opinion match
+this_repo,eng-rest,3,FP,716,lower,no,English Restaurant Test
+this_repo,eng-rest,3,FN,868,lower,no,English Restaurant Test
+this_repo,eng-rest,3,sum_cTP,1177.3057638292,higher,no,VA-weighted continuous true positives
+this_repo,eng-rest,3,cPrecision,0.5955011451,higher,no,Official evaluation script confirmed
+this_repo,eng-rest,3,cRecall,0.5529853282,higher,no,Official evaluation script confirmed
+this_repo,eng-rest,3,cF1,0.5734562902,higher,yes,Official evaluation script confirmed
 paper_best,eng-rest,3,cF1,0.6514,higher,yes,Best result reported in paper Table 2
+paper_second,eng-rest,3,cF1,0.6403,higher,yes,Second result reported in paper Table 2
+paper_baseline_kimik2,eng-rest,3,cF1,0.3746,higher,yes,Official baseline reported in paper Table 2
+paper_baseline_qwen3_14b,eng-rest,3,cF1,0.2673,higher,yes,Official baseline reported in paper Table 2
+this_repo_dev_frozen,eng-rest,1,RMSE_VA,1.1427,lower,yes,CLS five-seed ensemble selected on Dev before Test
+this_repo_test_diagnostic,eng-rest,1,RMSE_VA,1.1094,lower,yes,Reproducible 21-model mean-pooling ensemble; diagnostic because Dev did not select it
+this_repo_latest_test,eng-rest,2,cF1,0.6420,higher,yes,Kimi K2.7 single extraction plus relation RoBERTa VA rescore; local post-competition Test run
+this_repo_latest_test,eng-rest,3,cF1,0.5858,higher,yes,Kimi K2.7 single extraction plus relation RoBERTa VA rescore; local post-competition Test run

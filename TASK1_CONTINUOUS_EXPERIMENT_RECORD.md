@@ -1,97 +1,3 @@
-# DimABSA 2026 实验项目
-
-本项目针对 [DimABSA 2026](https://github.com/DimABSA/DimABSA2026) Track A 的英文
-Restaurant 数据，记录 Task 1 的连续情感回归，以及 Task 2/3 的三元组、四元组抽取实验。
-数据、模型权重、适配器与原始预测文件均不提交。
-
-## 任务与指标
-
-| 任务 | 输出 | 官方指标 |
-|---|---|---|
-| Task 1 / DimASR | 给定 Aspect 的 Valence、Arousal | `RMSE_VA`，越低越好 |
-| Task 2 / DimASTE | `(Aspect, Opinion, VA)` | `cF1`，越高越好 |
-| Task 3 / DimASQP | `(Aspect, Category, Opinion, VA)` | `cF1`，越高越好 |
-
-Task 2/3 只有结构字段精确匹配，预测才进入连续真阳性计算；VA 越接近金标准，`cTP`
-贡献越大。公式与论文对照见 [PAPER_RESULTS.md](PAPER_RESULTS.md)。
-
-## 已完成路线
-
-- 无训练 Qwen：Direct、CoT、固定和 BM25 动态 Few-shot；所有示例仅来自 Train，并在
-  Dev 上冻结校准。
-- Qwen LoRA/QLoRA：Task 1 使用独立 V/A 回归头；Task 2/3 用联合四元组生成并派生三元组。
-- 英文 RoBERTa：Text/Aspect 输入、独立 V/A 头、LogSigma 损失、Opinion token 辅助监督、
-  VA 均衡采样，以及 CLS / mean pooling 对照。
-- Task 2/3 混合抽取：word、bigram、trigram 三视角 BM25 检索，结构投票与关系级 VA 重评分。
-- API 抽取：支持 OpenAI 兼容接口（包括 Kimi 配置）；带限速、并发与断点续跑。使用 RoBERTa
-  重评分时必须显式提供真实的回归检查点，脚本不会使用占位分数。
-
-## 英文 Restaurant Test 结果
-
-### Task 1
-
-`RMSE_VA` 越低越好。这里特意区分“严格 Dev 冻结”与“读取 Test 后的诊断”，二者不能混作
-同一个正式结论。
-
-| 类别 | 方法 | Test RMSE_VA |
-|---|---|---:|
-| 早期 | 固定 Few-shot + Dev 校准 | 1.4511 |
-| 早期 | 四路无训练集成 + Dev 校准 | 1.3662 |
-| 早期 | Qwen LoRA + 无训练集成 | 1.2421 |
-| **严格 Dev 冻结** | CLS pooling、5 随机种子 RoBERTa 集成 | **1.1427** |
-| **可复现 Test 诊断** | mean pooling、21 个记录种子的 RoBERTa 集成 | **1.1094** |
-
-`1.1094` 的 21 个随机种子和复现说明在 [MEAN_POOLING_21MODELS.md](MEAN_POOLING_21MODELS.md)。
-它在 Dev 为 `1.0591`，而 CLS 五种子在 Dev 更好（`0.9603`）；因此它是可复现的 Test
-诊断观察值，不是由 Dev 预先选出的正式结果。论文英文 Restaurant 第一名为 `1.1035`。
-
-### Task 2/3
-
-`cF1` 越高越好。以下均为赛后本地 Test 评测，不代表 Codabench 官方提交名次。
-
-| 任务 | 路线 | Test cF1 | 论文最佳 |
-|---|---|---:|---:|
-| Task 2 | Qwen QLoRA + 三视角检索、二票投票、RoBERTa VA | 0.6166 | 0.7021 |
-| Task 2 | Kimi K2.7 单次抽取 + 关系 RoBERTa VA 重评分 | **0.6420** | 0.7021 |
-| Task 3 | Qwen QLoRA + 三视角检索、二票投票、RoBERTa VA | 0.5735 | 0.6514 |
-| Task 3 | Kimi K2.7 单次抽取 + 关系 RoBERTa VA 重评分 | **0.5858** | 0.6514 |
-
-Kimi 路线的 Test 是在开发阶段完成的单次抽取加重评分记录；Dev 上三次生成加二票投票更好，
-但该更贵的投票版本没有再作为新的 Test 选择运行。完整实验时间线见
-[TASK1_CONTINUOUS_EXPERIMENT_RECORD.md](TASK1_CONTINUOUS_EXPERIMENT_RECORD.md)。
-
-## 与论文结果的对照
-
-下表均为英文 Restaurant 同一数据集。KimiK2、Qwen3-14B 是论文列出的官方 baseline。
-
-| 任务 | 指标 | 本项目最新 Test 观察 | 论文第一名 | 论文第二名 | KimiK2 baseline | Qwen3-14B baseline |
-|---|---|---:|---:|---:|---:|---:|
-| Task 1 | `RMSE_VA` ↓ | 1.1094（诊断） | 1.1035 | 1.1812 | 2.1461 | 2.6427 |
-| Task 2 | `cF1` ↑ | 0.6420 | 0.7021 | 0.6985 | 0.4920 | 0.4483 |
-| Task 3 | `cF1` ↑ | 0.5858 | 0.6514 | 0.6403 | 0.3746 | 0.2673 |
-
-## 主要代码
-
-| 文件 | 用途 |
-|---|---|
-| `src/train_task1_logs_sigma_encoder.py` | CLS pooling 的英语 RoBERTa LogSigma 训练与推理 |
-| `src/train_task1_mean_pooling.py` | 可配置 CLS/mean pooling 的通用训练入口 |
-| `scripts/task1_optimization/train_mean_seeded10.py` | 云端批量 mean-pooling 随机种子实验脚本；需按本地路径修改 |
-| `scripts/deepseek_consistency_extraction.py` | OpenAI 兼容 LLM 的 BM25 few-shot、自一致性、投票与可选真实 VA 重评分 |
-| `src/extraction_hybrid.py` | 检索、结构投票及关系 VA 分数写回 |
-| `src/evaluate_task1.py`、`src/evaluate_extraction.py` | 严格本地评测 |
-
-更多文件用途见 [EXPERIMENT_FILES.md](EXPERIMENT_FILES.md)，当前状态和后续路线见
-[.ai/HANDOFF.md](.ai/HANDOFF.md)。
-
-## 实验边界
-
-- Few-shot、BM25 检索、模型配置、阈值与校准只使用 Train/Dev。
-- Test 不进入训练、检索或校准拟合；任何 Test 后才发现的改善均明确标为“诊断”。
-- 本仓库不含官方数据、模型权重、API 密钥、原始 Test 预测或云端日志。
-
----
-
 # Task 1 改进实验记录
 
 ## 第一次改进：模型、损失函数与 VA 表示
@@ -233,7 +139,7 @@ Test。需要注意，Base 与 Large 来自不同的情感预训练检查点，�
 | MoCo＋EmoBank 0.2＋SemEval 0.1 | 0.9317 |
 | MoCo＋EmoBank 0.1＋SemEval 0.1 | 0.9319 |
 
-混合损失相对第一次 `0.9252` 只改善约 `0.0005`；MoCo 和当前多任务权重均未带来提升。
+混合损失相对第一次 `0.9252` 只改善约 `0.0005`；MoCo和当前多任务权重均未带来提升。
 本轮最好 `0.9247` 仍差于公开数据顺序预训练的 `0.9169`，因此自动跳过额外随机种子与
 Test。当前总最佳仍为 EmoBank→SemEval→DimABSA 的 Dev `0.9169`。
 
@@ -271,13 +177,13 @@ Test `1.1486`。相对 5.1 复现的 `1.1578` 改善约 `0.0092`。
 
 ### 改进方法
 
-保持编码器和其余配置不变，只把“CLS 池化”换成“平均池化”：对 attention_mask 内的
+保持编码器和其余配置不变，只把"CLS 池化"换成"平均池化"：对 attention_mask 内的
 全部 token 表示取平均，得到句子级向量后再输入 V/A 回归头。使用的仍是 SemEval
 预训练编码器、解冻后 12 层和 LogSigma 损失。本轮未加入 Opinion 辅助和 VA 均衡采样。
 
 ### 为什么有效
 
-1. RoBERTa 预训练没有“下一句预测”任务，其 [CLS] 向量承载整句信息的能力弱于 BERT。
+1. RoBERTa 预训练没有"下一句预测"任务，其 [CLS] 向量承载整句信息的能力弱于 BERT。
 2. Aspect 信息散落在句子各处，平均池化直接汇总所有词的信息，不依赖注意力机制
    把信息搬运到第 0 个位置。
 3. 对多个位置取平均相当于隐式正则，小数据下更不易过拟合。
@@ -304,14 +210,14 @@ PCC_A 0.6703）。
 | 平均池化三种子 | 1.1148 | **1.1063** |
 
 注意：官方 Dev 上平均池化（1.1148）反而差于 CLS 五种子（0.9600），Test 上才反转
-为 1.1063 对 1.1427。按“Dev 冻结后才跑 Test”的规则，平均池化路线没有通过 Dev
+为 1.1063 对 1.1427。按"Dev 冻结后才跑 Test"的规则，平均池化路线没有通过 Dev
 选择，其 Test `1.1063` 属于诊断性结果，不能当作 Dev 冻结的正式结论。Dev 差而
 Test 好需要进一步解释，不能在 Dev 上复现提升前把它当作稳定优势。
 
 ### 多种子验证与可复现的 21 模型集成
 
 早期三种子训练脚本存在漏洞：CLI 的 `--seed` 从未传给 `torch.manual_seed`，三个
-“种子”实为同进程随机运行，实际 RNG 种子没有记录，无法从零复现。补救方式：新建
+"种子"实为同进程随机运行，实际 RNG 种子没有记录，无法从零复现。补救方式：新建
 `train_mean_seeded10.py`，每次运行随机抽取 `rng_seed` 并写入
 `experiment_config.json`，再固定该种子训练，逐 run 可复现。
 
@@ -377,7 +283,7 @@ Test 好需要进一步解释，不能在 Dev 上复现提升前把它当作稳�
 更有效，且 VA 用专门的关系 RoBERTa 重评分仍有约 0.01 增益。剩余可试：投票版 Test
 （Dev 上 3 次生成 +2 票再涨 0.017/0.016，成本约 3 倍）。
 
-另有“只加数据”对照：把英语笔记本数据并入餐厅（6360 条）重训 Qwen 抽取器，训练 Dev
+另有"只加数据"对照：把英语笔记本数据并入餐厅（6360 条）重训 Qwen 抽取器，训练 Dev
 mean cF1 从 0.6153 升到 0.6886，但 Test Task 2/3 仅 `0.6128/0.5631`，与基线持平，
 Dev 的提升没有泛化到 Test；Task 1 用合并数据（mean pooling 3 种子）集成 Test `1.1348`，
 反而差于餐厅单独的 21 模型集成 `1.1094`（跨域污染）。结论：瓶颈不是数据量。
