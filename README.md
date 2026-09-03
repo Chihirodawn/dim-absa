@@ -1,7 +1,8 @@
 # DimABSA 2026 实验项目
 
-本项目针对 [DimABSA 2026](https://github.com/DimABSA/DimABSA2026) Track A 的英文
-Restaurant 数据，记录 Task 1 的连续情感回归，以及 Task 2/3 的三元组、四元组抽取实验。
+本项目针对 [DimABSA 2026](https://github.com/DimABSA/DimABSA2026) Track A，以英文
+Restaurant 为主要目标，记录 Task 1 连续情感回归、多语言多领域混合训练，以及 Task 2/3
+的三元组、四元组抽取实验。
 数据、模型权重、适配器与原始预测文件均不提交。
 
 ## 任务与指标
@@ -22,6 +23,8 @@ Task 2/3 只有结构字段精确匹配，预测才进入连续真阳性计算�
 - Qwen LoRA/QLoRA：Task 1 使用独立 V/A 回归头；Task 2/3 用联合四元组生成并派生三元组。
 - 英文 RoBERTa：Text/Aspect 输入、独立 V/A 头、LogSigma 损失、Opinion token 辅助监督、
   VA 均衡采样，以及 CLS / mean pooling 对照。
+- Qwen3-8B 混合训练：合并10个语言-领域的 Task 1 数据，使用 LoRA、Huber、R-Drop、PGD、
+  mask-aware mean pooling 和受限二维回归头。
 - Task 2/3 混合抽取：word、bigram、trigram 三视角 BM25 检索，结构投票与关系级 VA 重评分。
 - API 抽取：支持 OpenAI 兼容接口（包括 Kimi 配置）；带限速、并发与断点续跑。使用 RoBERTa
   重评分时必须显式提供真实的回归检查点，脚本不会使用占位分数。
@@ -38,12 +41,14 @@ Task 2/3 只有结构字段精确匹配，预测才进入连续真阳性计算�
 | 早期 | 固定 Few-shot + Dev 校准 | 1.4511 |
 | 早期 | 四路无训练集成 + Dev 校准 | 1.3662 |
 | 早期 | Qwen LoRA + 无训练集成 | 1.2421 |
-| **严格 Dev 冻结** | CLS pooling、5 随机种子 RoBERTa 集成 | **1.1427** |
+| 严格 Dev 冻结 | CLS pooling、5 随机种子 RoBERTa 集成 | 1.1427 |
+| **严格 Dev 冻结** | Qwen3-8B 多语言多领域 LoRA、单 checkpoint | **1.1168** |
 | **可复现 Test 诊断** | mean pooling、21 个记录种子的 RoBERTa 集成 | **1.1094** |
 
-`1.1094` 的 21 个随机种子和复现说明在 [MEAN_POOLING_21MODELS.md](MEAN_POOLING_21MODELS.md)。
-它在 Dev 为 `1.0591`，而 CLS 五种子在 Dev 更好（`0.9603`）；因此它是可复现的 Test
-诊断观察值，不是由 Dev 预先选出的正式结果。论文英文 Restaurant 第一名为 `1.1035`。
+Qwen3-8B 的 checkpoint 由英文 Restaurant Dev `0.8522` 选择，因此 `1.1168` 是当前
+严格 Dev 冻结的最佳单模型结果。`1.1094` 的21个随机种子和复现说明在
+[MEAN_POOLING_21MODELS.md](MEAN_POOLING_21MODELS.md)；它的 Dev 为 `1.0591`，差于 CLS
+五种子的 `0.9603`，因此仍属于 Test 诊断观察值。论文英文 Restaurant 第一名为 `1.1035`。
 
 ### Task 2/3
 
@@ -66,7 +71,7 @@ Kimi 路线的 Test 是在开发阶段完成的单次抽取加重评分记录；
 
 | 任务 | 指标 | 本项目最新 Test 观察 | 论文第一名 | 论文第二名 | KimiK2 baseline | Qwen3-14B baseline |
 |---|---|---:|---:|---:|---:|---:|
-| Task 1 | `RMSE_VA` ↓ | 1.1094（诊断） | 1.1035 | 1.1812 | 2.1461 | 2.6427 |
+| Task 1 | `RMSE_VA` ↓ | 1.1168（Dev冻结）/ 1.1094（诊断） | 1.1035 | 1.1812 | 2.1461 | 2.6427 |
 | Task 2 | `cF1` ↑ | 0.6420 | 0.7021 | 0.6985 | 0.4920 | 0.4483 |
 | Task 3 | `cF1` ↑ | 0.5858 | 0.6514 | 0.6403 | 0.3746 | 0.2673 |
 
@@ -377,7 +382,237 @@ Test 好需要进一步解释，不能在 Dev 上复现提升前把它当作稳�
 更有效，且 VA 用专门的关系 RoBERTa 重评分仍有约 0.01 增益。剩余可试：投票版 Test
 （Dev 上 3 次生成 +2 票再涨 0.017/0.016，成本约 3 倍）。
 
-另有“只加数据”对照：把英语笔记本数据并入餐厅（6360 条）重训 Qwen 抽取器，训练 Dev
+另有"只加数据"对照：把英语笔记本数据并入餐厅（6360 条）重训 Qwen 抽取器，训练 Dev
 mean cF1 从 0.6153 升到 0.6886，但 Test Task 2/3 仅 `0.6128/0.5631`，与基线持平，
 Dev 的提升没有泛化到 Test；Task 1 用合并数据（mean pooling 3 种子）集成 Test `1.1348`，
 反而差于餐厅单独的 21 模型集成 `1.1094`（跨域污染）。结论：瓶颈不是数据量。
+
+## 第七次改进：Qwen3-8B-Base + LoRA 混合训练
+
+### 背景
+
+参考电信 TeleAI 在 SemEval-2026 Task 3 上的论文（Qwen2.5-7B + LoRA + 混合训练 + R-Drop + PGD，
+Dev RMSE = 0.85），尝试将相同方法迁移到 Qwen3-8B-Base 上。之前方案A（RoBERTa-large + R-Drop + PGD）
+的 Dev 为 0.9564，不如之前最佳 0.9169，说明 R-Drop/PGD 在 RoBERTa 上迁移效果不佳。
+方案B 直接换用 Qwen3-8B-Base 底座，验证 LLM 底座是否比 BERT 类编码器更适合此任务。
+
+### 技术细节与思路
+
+#### 1. 底座选择：为什么从 RoBERTa 换到 Qwen3-8B-Base
+
+**问题**：之前所有实验都基于 RoBERTa-large（~355M 参数），最佳 Dev 为 0.9169。
+尝试在其上添加 R-Drop + PGD 正则化（方案A），结果 Dev 反而退化到 0.9564。
+
+**分析**：
+- RoBERTa 是 BERT 类编码器，设计用于双向注意力，适合分类/回归任务
+- 但 RoBERTa 的预训练目标是 MLM（Masked Language Modeling），没有 next-token prediction
+- 对于需要深层语义理解的任务，LLM（decoder-only）通常比 encoder-only 模型更强
+- 电信论文用 Qwen2.5-7B 取得 0.85，证明 LLM 底座在此任务上有效
+
+**决策**：换用 Qwen3-8B-Base（~8B 参数），比 Qwen2.5-7B 更新更大，预期效果更好。
+
+#### 2. LoRA 微调：为什么不用全参数微调
+
+**问题**：8B 模型全参数微调需要 ~16GB 显存（bf16），加上优化器状态和梯度，单卡 4090 (24GB) 不够。
+
+**方案**：LoRA（Low-Rank Adaptation）
+- 冻结原始权重，只训练低秩适配器（r=16, α=32）
+- 可训练参数：15M（占总参数 0.2%）
+- 显存占用：~16GB（模型）+ ~1GB（LoRA + 优化器）= ~17GB，24GB 够用
+
+**配置**：
+```python
+lora_config = LoraConfig(
+    r=16,              # 低秩维度
+    lora_alpha=32,     # 缩放因子（通常 2*r）
+    lora_dropout=0.05, # dropout 防止过拟合
+    target_modules=["q_proj", "k_proj", "v_proj", "o_proj"],  # 注意力层
+)
+```
+
+**思路**：LoRA 在 NLP 任务上已被广泛验证有效，且计算效率高。电信论文也用 LoRA，我们保持一致。
+
+#### 3. 混合训练：为什么不用单语言-域训练
+
+**问题**：之前的实验都是只用 English Restaurant 数据训练，然后评估。
+但官方提供了 10 个语言-域的训练数据（英语、中文、日语、俄语、鞑靼语、乌克兰语 × 餐厅/笔记本/金融/酒店）。
+
+**方案**：混合训练（Mixed Training）
+- 把所有 10 个语言-域的训练数据拼在一起（39,069 aspects）
+- 10% 切分作为 val（3,902 aspects），90% 用于训练（35,167 aspects）
+- 模型在混合数据上训练，评估时分别在各语言的 test 集上测
+
+**思路**：
+- 多语言混合训练可以增强模型的跨语言能力
+- 即使目标是英语，其他语言的数据也能提供正则化效果
+- 电信论文验证了混合训练优于单语言训练
+- 代价是：模型可能在某些语言上表现不如专门针对该语言训练的模型
+
+#### 4. R-Drop：一致性正则化
+
+**问题**：训练数据只有 35K aspects，模型容易过拟合。需要正则化。
+
+**方案**：R-Drop（Regularized Dropout）
+- 对同一输入做两次前向传播（利用 dropout 的随机性）
+- 最小化两次预测的 MSE（一致性损失）
+- 公式：`L = 0.5 * (loss1 + loss2) + α * MSE(pred1, pred2)`，α=0.5
+
+**思路**：
+- Dropout 本身是正则化，但随机性导致每次预测不同
+- R-Drop 强制两次预测一致，增强模型鲁棒性
+- 不需要额外数据，计算代价是 2 倍前向传播
+- 电信论文验证了 R-Drop 对此任务有效（消融实验 -0.07）
+
+#### 5. PGD 对抗训练：增强鲁棒性
+
+**问题**：模型对输入的微小扰动敏感，容易过拟合到训练数据的噪声。
+
+**方案**：PGD（Projected Gradient Descent）对抗训练
+- 在 hidden states 上加小扰动 δ（ε=0.02）
+- 用梯度上升找最坏情况的扰动（K=1 步）
+- 用扰动后的数据计算对抗损失
+- 总损失：`L = L_clean + λ * L_adv`，λ=0.5
+
+**思路**：
+- 对抗训练是 CV 中的经典正则化方法
+- 在 NLP 中，对 embedding 或 hidden states 加扰动可以增强鲁棒性
+- 电信论文验证了 PGD 对此任务有效（消融实验 -0.09）
+- 我们的实现是 hidden-state 级别（而非 embedding 级别），计算效率更高
+
+**注意**：我们只用了 K=1 步（电信用 K=3），因为 3 步太慢（每 batch 5 次前向传播）。
+
+#### 6. Mean Pooling + Sigmoid 映射
+
+**问题**：如何从序列表示得到 VA 预测？
+
+**方案**：
+1. Mean Pooling：对 attention_mask 内的所有 token 取平均
+   - 比 CLS pooling 更稳定（之前实验验证过）
+   - 不依赖 [CLS] 位置承载整句信息
+2. 2D 线性头：输出 (V, A) 两个值
+3. Sigmoid 映射：`output = 1 + 8 * sigmoid(z)`，确保输出在 [1, 9] 范围
+
+**思路**：
+- Mean pooling 在第六次改进中已验证优于 CLS
+- Sigmoid 映射确保输出合法（VA 范围是 1-9）
+- 比直接回归更稳定
+
+#### 7. 差分学习率
+
+**问题**：LoRA 参数和回归头的学习率应该一样吗？
+
+**方案**：差分学习率
+- LoRA 参数：lr=1e-4（小，防止破坏预训练权重）
+- 回归头：lr=1e-3（大，快速收敛）
+
+**思路**：
+- LoRA 是在预训练权重上加低秩扰动，应该小心更新
+- 回归头是随机初始化的，可以激进学习
+- 电信论文也用了差分学习率，验证有效
+
+#### 8. 训练策略：Gradient Checkpointing + bf16
+
+**问题**：8B 模型显存不够，如何训练？
+
+**方案**：
+- Gradient Checkpointing：用计算换显存，不保存中间激活值
+- bf16 精度：比 fp32 省一半显存，精度损失可忽略
+- batch_size=4, grad_accum=4：等效 batch=16
+
+**代价**：
+- Gradient Checkpointing 让训练慢 ~30%（需要重新计算激活值）
+- 但显存从 ~28GB 降到 ~17GB，能在 4090 上跑
+
+#### 9. 训练动态与观察
+
+**现象**：
+- Dev 在 epoch 1.75 达到最佳（0.8522），之后过拟合
+- Val（混合验证集）持续下降，但 Dev（English Restaurant）上升
+- 说明模型在过拟合验证集分布，而非泛化到 English Restaurant
+
+**分析**：
+- Val 是 10 个语言-域混合的 10% 切分
+- Dev 是纯 English Restaurant
+- 模型学到了混合数据的规律，但在 English Restaurant 上泛化变差
+- 这是混合训练的代价：不同语言-域的分布不同
+
+**对策**：
+- 按 Dev 选 checkpoint（而非 Val）
+- 但 Dev 只在 epoch 0.25/0.5/... 评估，粒度粗
+- 更好的做法：用 English Restaurant 的 train/val 切分选 checkpoint
+
+### 方法
+
+- **底座**：Qwen3-8B-Base（~8B 参数，bf16 约 16GB）
+- **微调**：LoRA（r=16, α=32, dropout=0.05）作用于 q/k/v/o_proj
+- **训练数据**：全部 10 个语言-域的 subtask_1 训练数据混合（39,069 aspects），10% 切分作为 val
+- **损失**：Huber (β=0.5) + R-Drop (α=0.5) + PGD 对抗训练 (ε=0.02, steps=1, λ=0.5)
+- **池化**：mask-aware mean pooling → 2D 线性头 + sigmoid 映射到 [1, 9]
+- **优化器**：AdamW，差分学习率（LoRA 1e-4, head 1e-3），warmup 0.1 + linear decay
+- **精度**：bf16，gradient checkpointing
+- **硬件**：SeetaCloud RTX 4090 D (24GB)，batch_size=4, grad_accum=4
+- **训练时长**：约 5 小时到 epoch 2.0，触发 early stopping
+
+### Checkpoint 保存
+
+由于训练脚本最初未保存 optimizer state，只能保存模型权重。按 eval 节点下载了多个 checkpoint：
+
+| Step | Epoch | Dev RMSE | 说明 |
+|------|-------|----------|------|
+| 6594 | 0.75 | 0.8600 | 已下载 |
+| 8792 | 1.0 | 0.8568 | 丢失（被后续覆盖） |
+| 10990 | 1.25 | 0.8818 | 丢失（被后续覆盖） |
+| 13188 | 1.5 | 0.9069 | 已下载 |
+| 15386 | 1.75 | **0.8522** | **最佳 Dev，已下载** |
+| 17584 | 2.0 | 0.9090 | 已下载 |
+
+注意：服务器按 val_rmse 保存 checkpoint，epoch 1.0 的 Dev=0.8568 虽好但 val 不是最佳，被覆盖。
+epoch 1.75 的 Dev=0.8522 是全局最佳，已保存到本地 `step_15386_epoch1.75/`。
+
+### 10 个测试集结果（epoch 1.75 checkpoint）
+
+| 语言-域 | Test RMSE | 记录数 | 论文报告最佳 | 最佳团队 | 差距 |
+|---------|-----------|--------|----------|----------|------|
+| zho-fin | **0.5655** | 842 | 0.4841 | HUS@NLP-VNU | +0.081 |
+| jpn-hot | **0.6473** | 800 | 0.5561 | TeleAI | +0.091 |
+| zho-lap | **0.6985** | 1000 | 0.6103 | TeleAI | +0.088 |
+| jpn-fin | **0.8277** | 800 | 0.6581 | TeleAI | +0.170 |
+| zho-rest | **1.0273** | 1000 | 0.9256 | ICT-NLP | +0.102 |
+| **eng-rest** | **1.1168** | 1000 | **1.1035** | LogSigma | +0.013 |
+| **eng-lap** | **1.2172** | 1000 | 1.2408 | LogSigma | **-0.024** ✓ |
+| rus-rest | **1.3192** | 1072 | 1.2190 | PAI | +0.100 |
+| ukr-rest | **1.3610** | 1072 | 1.1888 | PAI | +0.172 |
+| tat-rest | **1.7634** | 1072 | 1.5294 | PAI | +0.234 |
+
+### 与之前结果对比
+
+| 方案 | 底座 | English Restaurant Dev | English Restaurant Test |
+|------|------|------------------------|-------------------------|
+| 第六次最佳（21模型集成） | RoBERTa-large | 1.0591 | 1.1094 |
+| 方案A（RoBERTa + R-Drop + PGD） | RoBERTa-large | 0.9564 | 1.2035 |
+| **方案B（Qwen3-8B + LoRA）** | **Qwen3-8B-Base** | **0.8522** | **1.1168** |
+| 电信论文（Qwen2.5-7B） | Qwen2.5-7B | 0.85 | — |
+
+### 结论
+
+1. **Qwen3-8B-Base 的 Dev 数值明显优于 RoBERTa-large**：Dev 从 0.9169 降到 0.8522
+   （提升 0.065），支持 LLM 底座更适合该任务的假设，与电信论文的观察一致；但仍需
+   多随机种子验证，不能由一次运行直接证明模型类别的普遍优劣。
+
+2. **英语上表现接近官方最佳**：
+   - eng-lap: 1.2172 vs 论文报告最佳 1.2408 → 本地数值低 0.024（非官方提交）
+   - eng-rest: 1.1168 vs 官方最佳 1.1035 → 只差 0.013
+   说明单 checkpoint 在英语上已经能打一。
+
+3. **中日文表现良好但非最佳**：Test 在 0.5-1.0 范围，但比官方最佳差 0.08-0.17。
+   官方最佳团队（TeleAI、ICT-NLP）通常用了多种子集成或特殊架构。
+
+4. **小语种表现差**：tat-rest (1.76)、ukr-rest (1.36)、rus-rest (1.32) 差距最大，
+   说明鞑靼语、乌克兰语、俄语的训练数据或模型能力不足。这些是低资源语言，
+   Qwen3 的预训练数据可能覆盖不充分。
+
+5. **单 checkpoint 方差问题**：之前实验记录显示 Test 方差很大（1.10-1.40），
+   我们的 1.1168 可能是好运气。要确认 Qwen3-8B 是否真的更好，需要多种子验证。
+
+6. **训练效率**：Qwen3-8B + LoRA 在单卡 4090 上约 5 小时跑完 2 epochs，
+   比 RoBERTa-large 慢很多（RoBERTa 约 70 分钟），但效果更好。
