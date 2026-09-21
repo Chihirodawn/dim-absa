@@ -103,7 +103,7 @@ RUN_MODE=full CONFIRM_FULL_RUN=YES /root/miniconda3/bin/python \
 
 ## 8. 最近更新
 
-- 2026-09-21：README 新增 2026-09 Task 2/3 中英文完整研究总结，明确当前 Qwen3-8B
+- 2026-09-21：README 末尾新增 2026-09 Task 2/3 中英文完整研究总结，明确当前 Qwen3-8B
   在 English Restaurant Task 3 上略高于旧 Qwen 混合系统和 Kimi 原始输出，但仍低于
   Kimi + RoBERTa 最终系统；同时分解通用大模型与微调 Qwen 的强弱项，记录 RAFT 尚未
   实际运行，并把跨划分组件叠加的 `~0.48` 更正为估算而非正式结果。

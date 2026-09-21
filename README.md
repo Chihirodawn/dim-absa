@@ -25,8 +25,6 @@ Task 2/3 只有结构字段精确匹配，预测才进入连续真阳性计算�
   VA 均衡采样，以及 CLS / mean pooling 对照。
 - Qwen3-8B 混合训练：合并10个语言-领域的 Task 1 数据，使用 LoRA、Huber、R-Drop、PGD、
   mask-aware mean pooling 和受限二维回归头。
-- Qwen3-8B 中英文 Task 2/3：四个 Restaurant/Laptop 数据集均衡 QLoRA SFT，冻结后使用
-  单次 greedy 生成；随后围绕候选覆盖、Category、LLM 审查、自一致性与 VA 适配做消融。
 - Task 2/3 混合抽取：word、bigram、trigram 三视角 BM25 检索，结构投票与关系级 VA 重评分。
 - API 抽取：支持 OpenAI 兼容接口（包括 Kimi 配置）；带限速、并发与断点续跑。使用 RoBERTa
   重评分时必须显式提供真实的回归检查点，脚本不会使用占位分数。
@@ -59,20 +57,13 @@ Qwen3-8B 的 checkpoint 由英文 Restaurant Dev `0.8522` 选择，因此 `1.116
 | 任务 | 路线 | Test cF1 | 论文最佳 |
 |---|---|---:|---:|
 | Task 2 | Qwen QLoRA + 三视角检索、二票投票、RoBERTa VA | 0.6166 | 0.7021 |
-| Task 2 | Qwen3-8B 中英文 QLoRA、单次 greedy（seed 2971） | 0.6115 | 0.7021 |
 | Task 2 | Kimi K2.7 单次抽取 + 关系 RoBERTa VA 重评分 | **0.6420** | 0.7021 |
 | Task 3 | Qwen QLoRA + 三视角检索、二票投票、RoBERTa VA | 0.5735 | 0.6514 |
-| Task 3 | Qwen3-8B 中英文 QLoRA、单次 greedy（seed 2971） | 0.5781 | 0.6514 |
 | Task 3 | Kimi K2.7 单次抽取 + 关系 RoBERTa VA 重评分 | **0.5858** | 0.6514 |
 
 Kimi 路线的 Test 是在开发阶段完成的单次抽取加重评分记录；Dev 上三次生成加二票投票更好，
 但该更贵的投票版本没有再作为新的 Test 选择运行。完整实验时间线见
 [TASK1_CONTINUOUS_EXPERIMENT_RECORD.md](TASK1_CONTINUOUS_EXPERIMENT_RECORD.md)。
-
-这里不能简单写成“新 Qwen 不如旧方法”：在同一 English Restaurant Task 3 上，新版
-Qwen3-8B 单次 greedy 的 `0.5781` 比旧 Qwen 混合系统 `0.5735` 高 `0.0046`，也比 Kimi
-原始输出 `0.5762` 高 `0.0019`；但低于 Kimi + RoBERTa 的最终系统 `0.5858` 约 `0.0077`。
-三条路线的组件和数据范围不同，因此这是同数据集上的系统结果对照，不是纯底座能力排名。
 
 ## 与论文结果的对照
 
@@ -103,95 +94,6 @@ Qwen3-8B 单次 greedy 的 `0.5781` 比旧 Qwen 混合系统 `0.5735` 高 `0.004
 - Few-shot、BM25 检索、模型配置、阈值与校准只使用 Train/Dev。
 - Test 不进入训练、检索或校准拟合；任何 Test 后才发现的改善均明确标为“诊断”。
 - 本仓库不含官方数据、模型权重、API 密钥、原始 Test 预测或云端日志。
-
-## 2026-09 Task 2/3 中英文实验总结
-
-### 当前冻结基线
-
-新版主线是 Qwen3-8B-Base + 4-bit QLoRA：四个中英文 Restaurant/Laptop Train 数据集
-均衡训练一轮，seed 2971；Dev/Test 都使用一次 greedy 生成，没有检索、投票或外部 API。
-冻结 Dev 后运行四个完整 Test，各 1,000 条，独立复核通过。
-
-| 数据集 | Task 2 Test cF1 | Task 3 Test cF1 | Task 3 论文第一名 | Task 3 差距 |
-|---|---:|---:|---:|---:|
-| English Laptop | 0.5235 | 0.3083 | 0.4227 | -0.1144 |
-| English Restaurant | 0.6115 | 0.5781 | 0.6514 | -0.0733 |
-| Chinese Laptop | 0.4888 | 0.3971 | 0.4824 | -0.0853 |
-| Chinese Restaurant | 0.5074 | 0.4653 | 0.5521 | -0.0868 |
-| **宏平均** | **0.5328** | **0.4372** | **0.5272** | **-0.0900** |
-
-同配置 seed 42 的 Test Task 2/3/均值为 `0.5326/0.4344/0.4835`；seed 2971 为
-`0.5328/0.4372/0.4850`，只高约 `0.0015`。当前问题不是再换一个随机种子，而是结构召回、
-Laptop 细粒度 Category 和候选选择。
-
-### 实验过程与结论
-
-| 阶段 | 尝试 | 结果 | 决策 |
-|---|---|---|---|
-| 结构奖励训练 | 8B 分解奖励 GRPO，分别奖励 span、Category 与 VA | Dev 比 SFT 低 `0.0132`，Test 低 `0.0303` | 现有奖励不足以支持继续在线 RL |
-| 稳定 SFT 基线 | 四个中英文数据集均衡 QLoRA SFT，重建 seed 2971 | 四 Test Task 3 宏平均 `0.4372`，复核通过 | 作为后续组件的冻结基线 |
-| 多候选生成 | greedy + 4 个采样候选 | Laptop Dev100 Oracle 均值可增 `0.1066`，但 2-of-4 一致性反而 `-0.0040` | 候选池有答案，主要缺可靠选择器 |
-| Category 头 | 冻结 Qwen，训练 last-token 层级 Category 头 | 四 Dev Task 3 仅 `+0.0047`；English Laptop `+0.0244`，English Restaurant `-0.0133` | 不能全域覆盖，应只处理困难域 |
-| Train-only 类别规则 | Aspect/Opinion/pair 先验和固定 AO 类别选择 | English Laptop 全 Dev `+0.0151`；候选选择器 confirm `-0.0440` | 规则信号弱且容易过拟合 |
-| 检索与 API 类别纠错 | BM25、Dense、Hybrid 检索 + DeepSeek 候选类排序 | Hybrid 检索 Top1/Top5 `0.6883/0.9013`，但端到端 Task 3 仅 `+0.0051` | 检索可作特征，不能单独解决 Category |
-| 通用大模型直接重分类 | DeepSeek 全覆盖改写 Qwen Category | 四个数据集均为净损害；Restaurant 原类别准确率最高约 `0.99` | 保留 Qwen 的域内 Category，不让通用模型全量覆盖 |
-| 通用大模型审查 | DeepSeek 对原文锚定 A–O 候选做 keep/reject | Laptop Dev100 confirm Task 2 `+0.0225`；英文 `+0.0459`，中文约 `-0.0010` | 仅作为英文高精度过滤器，不作中文召回器 |
-| 自一致性 | SCSG 严格多数投票 k=5/10/15 | 全局为负；Laptop 局部例外：中文约 `+0.053`、英文约 `+0.008` | 只允许按域选择性使用，需完整 Dev 再确认 |
-| VA 后处理 | PAI 的 affine、quantile、Sinkhorn 等五种适配 | 英文全负，中文最好仅约 `+0.001`；匹配项 VA 损失占比小 | 当前瓶颈不是 VA 分布，关闭该路线 |
-| RAFT | 只完成候选生成、门槛与对照方案设计 | **尚未训练或评测** | 先把候选排序器做可靠，再与等预算 continued SFT 对照 |
-
-早期记录中“叠加组件后 Task 3 宏平均约 `0.48`”只是把不同划分上的局部增益相加：
-DeepSeek 过滤来自 Test 抽样，SCSG 来自 Dev50。它不是一次完整端到端运行，也不是正式成绩；
-在统一的完整 Dev 上冻结组合、再运行一次 Test 之前，不能写成已经达到 `0.48`。
-
-### 通用大模型与微调 Qwen 的能力分工
-
-| 能力 | 通用大模型更有优势的部分 | 微调 Qwen 更有优势的部分 |
-|---|---|---|
-| 语义判断 | 强模型能判断 A–O 是否语义成立、发现英文误报和不自然边界；DeepSeek 英文过滤的 confirm 增益为 `+0.0459` | Qwen 已学会任务输出协议，原文锚定和批量生成更稳定 |
-| 结构召回 | Kimi 在 English Restaurant 的直接抽取较强，原始 Task 2 达 `0.6315` | 并非所有通用模型都强：DeepSeek V4 Flash 曾有 50.8% 空句，Task 3 仅 `0.4193`；本地 Qwen 更可控 |
-| Category | 通用模型适合对少量高冲突候选做语义复核 | Qwen 的域内标签先验明显更可靠；DeepSeek 全量重分类会把正确类别改错，Restaurant 尤其明显 |
-| 多语言/多领域 | 当前没有足够证据证明 API 模型在中文也有相同收益 | 一个适配器覆盖四个中英文数据集，输出稳定；中文 A–O 过滤实验也表明应保留 Qwen 基线 |
-| VA 数值 | 通用生成模型没有显示稳定优势 | 专门回归头能带来约 `0.006~0.010` 的小增益，但 VA 不是当前主要误差源 |
-
-因此，当前最合理的系统不是“用通用大模型替换 Qwen”，而是让 Qwen 做稳定候选生成和域内
-Category，让通用大模型只做高置信的英文 A–O 审查，再由专门回归头预测 VA。
-
-### Qwen 当前做得好与做得不好的地方
-
-**做得好：**
-
-- 输出稳定。seed 2971 的四 Dev 共 1,000 条无 JSON 解析失败；四 Test 共 4,000 条只有
-  2 次解析失败，完整 ID、顺序和指标已独立复核。
-- Restaurant Category 已较可靠。Test 抽样中，精确 A–O 条件下 English/Chinese
-  Restaurant 的原 Category 正确率约为 `0.99/0.93`，通用模型重分类反而破坏它。
-- 单模型覆盖四个中英文域，且 English Restaurant Task 3 单次 greedy `0.5781` 已略高于
-  旧 Qwen 三视角投票系统 `0.5735`。
-
-**做得不好：**
-
-- English Laptop 的 121 类细粒度 Category 是最大短板。Test 中精确 A–O 命中后仍有
-  419 个关系类别错误，Task 3 只有 `0.3083`。
-- A–O 召回、边界和误报仍限制 Task 2/3。候选 Oracle 很高而简单投票无效，说明模型能
-  偶尔生成正确答案，却不能稳定给正确候选更高分。
-- 同一全局策略会伤害强域：Category 头、SCSG 和 API 改写都出现 Laptop 有益、Restaurant
-  退化，必须按语言和领域路由。
-- 当前 VA 已相对可用，继续做全局数值校准收益很小，不能掩盖结构和类别问题。
-
-### 下一步研究路线
-
-1. **先训练候选排序器，而不是立刻继续 RL。** 用 Train 生成多候选，按 A–O 有效性、
-   边界、Category 与 VA 分解成 rubric，训练 Bradley–Terry 成对排序器；按 record 分组切分，
-   并在完整 Official Dev 上校准和验收。
-2. **按域分工。** Restaurant 保留 Qwen 原输出；English Laptop 加 A–O 审查和 Category
-   reranker；Chinese Laptop 仅在完整 Dev 复现后启用 SCSG；不要把局部组件全局套用。
-3. **采用混合系统。** Qwen 负责生成和域内标签，通用大模型只审查困难英文候选，RoBERTa
-   或 Task 1 回归头负责 VA。这样对应了各模型已经实测的强项。
-4. **再比较 RAFT 与 continued SFT。** 只有排序器通过完整 Dev 门槛后，才在相同数据量、
-   step、seed 和计算预算下比较 gold-anchored RAFT 与继续金标 SFT；RAFT 当前仍是待验证方案。
-5. **一次冻结、一次 Test。** 先在完整 Dev 做 baseline、单组件和组合消融；建议门槛为宏平均
-   至少 `+0.01`、强 Restaurant 域不明显下降、confirm 与 full 同方向。冻结后只运行一次 Test，
-   已经看过的 Test 结果只作诊断，不再反向选配置。
 
 ---
 
@@ -714,3 +616,110 @@ epoch 1.75 的 Dev=0.8522 是全局最佳，已保存到本地 `step_15386_epoch
 
 6. **训练效率**：Qwen3-8B + LoRA 在单卡 4090 上约 5 小时跑完 2 epochs，
    比 RoBERTa-large 慢很多（RoBERTa 约 70 分钟），但效果更好。
+
+---
+
+# 2026-09 Task 2/3 中英文实验总结
+
+## 当前冻结基线
+
+新版主线是 Qwen3-8B-Base + 4-bit QLoRA：四个中英文 Restaurant/Laptop Train 数据集
+均衡训练一轮，seed 2971；Dev/Test 都使用一次 greedy 生成，没有检索、投票或外部 API。
+冻结 Dev 后运行四个完整 Test，各 1,000 条，独立复核通过。
+
+| 数据集 | Task 2 Test cF1 | Task 3 Test cF1 | Task 3 论文第一名 | Task 3 差距 |
+|---|---:|---:|---:|---:|
+| English Laptop | 0.5235 | 0.3083 | 0.4227 | -0.1144 |
+| English Restaurant | 0.6115 | 0.5781 | 0.6514 | -0.0733 |
+| Chinese Laptop | 0.4888 | 0.3971 | 0.4824 | -0.0853 |
+| Chinese Restaurant | 0.5074 | 0.4653 | 0.5521 | -0.0868 |
+| **宏平均** | **0.5328** | **0.4372** | **0.5272** | **-0.0900** |
+
+同配置 seed 42 的 Test Task 2/3/均值为 `0.5326/0.4344/0.4835`；seed 2971 为
+`0.5328/0.4372/0.4850`，只高约 `0.0015`。当前问题不是再换一个随机种子，而是结构召回、
+Laptop 细粒度 Category 和候选选择。
+
+## 与此前 English Restaurant 方法比较
+
+| 任务 | 路线 | Test cF1 | 论文最佳 |
+|---|---|---:|---:|
+| Task 2 | 旧 Qwen QLoRA + 三视角检索、二票投票、RoBERTa VA | 0.6166 | 0.7021 |
+| Task 2 | 当前 Qwen3-8B 中英文 QLoRA、单次 greedy | 0.6115 | 0.7021 |
+| Task 2 | Kimi K2.7 单次抽取 + 关系 RoBERTa VA 重评分 | **0.6420** | 0.7021 |
+| Task 3 | 旧 Qwen QLoRA + 三视角检索、二票投票、RoBERTa VA | 0.5735 | 0.6514 |
+| Task 3 | 当前 Qwen3-8B 中英文 QLoRA、单次 greedy | 0.5781 | 0.6514 |
+| Task 3 | Kimi K2.7 单次抽取 + 关系 RoBERTa VA 重评分 | **0.5858** | 0.6514 |
+
+不能简单写成“新 Qwen 不如旧方法”：在同一 English Restaurant Task 3 上，当前
+Qwen3-8B 单次 greedy 的 `0.5781` 比旧 Qwen 混合系统 `0.5735` 高 `0.0046`，也比 Kimi
+原始输出 `0.5762` 高 `0.0019`；但低于 Kimi + RoBERTa 的最终系统 `0.5858` 约 `0.0077`。
+这些路线的组件、数据范围和推理预算不同，因此这是系统结果对照，不是纯底座能力排名。
+
+## 实验过程与结论
+
+| 阶段 | 尝试 | 结果 | 决策 |
+|---|---|---|---|
+| 结构奖励训练 | 8B 分解奖励 GRPO，分别奖励 span、Category 与 VA | Dev 比 SFT 低 `0.0132`，Test 低 `0.0303` | 现有奖励不足以支持继续在线 RL |
+| 稳定 SFT 基线 | 四个中英文数据集均衡 QLoRA SFT，重建 seed 2971 | 四 Test Task 3 宏平均 `0.4372`，复核通过 | 作为后续组件的冻结基线 |
+| 多候选生成 | greedy + 4 个采样候选 | Laptop Dev100 Oracle 均值可增 `0.1066`，但 2-of-4 一致性反而 `-0.0040` | 候选池有答案，主要缺可靠选择器 |
+| Category 头 | 冻结 Qwen，训练 last-token 层级 Category 头 | 四 Dev Task 3 仅 `+0.0047`；English Laptop `+0.0244`，English Restaurant `-0.0133` | 不能全域覆盖，应只处理困难域 |
+| Train-only 类别规则 | Aspect/Opinion/pair 先验和固定 AO 类别选择 | English Laptop 全 Dev `+0.0151`；候选选择器 confirm `-0.0440` | 规则信号弱且容易过拟合 |
+| 检索与 API 类别纠错 | BM25、Dense、Hybrid 检索 + DeepSeek 候选类排序 | Hybrid 检索 Top1/Top5 `0.6883/0.9013`，但端到端 Task 3 仅 `+0.0051` | 检索可作特征，不能单独解决 Category |
+| 通用大模型直接重分类 | DeepSeek 全覆盖改写 Qwen Category | 四个数据集均为净损害；Restaurant 原类别准确率最高约 `0.99` | 保留 Qwen 的域内 Category，不让通用模型全量覆盖 |
+| 通用大模型审查 | DeepSeek 对原文锚定 A–O 候选做 keep/reject | Laptop Dev100 confirm Task 2 `+0.0225`；英文 `+0.0459`，中文约 `-0.0010` | 仅作为英文高精度过滤器，不作中文召回器 |
+| 自一致性 | SCSG 严格多数投票 k=5/10/15 | 全局为负；Laptop 局部例外：中文约 `+0.053`、英文约 `+0.008` | 只允许按域选择性使用，需完整 Dev 再确认 |
+| VA 后处理 | PAI 的 affine、quantile、Sinkhorn 等五种适配 | 英文全负，中文最好仅约 `+0.001`；匹配项 VA 损失占比小 | 当前瓶颈不是 VA 分布，关闭该路线 |
+| RAFT | 只完成候选生成、门槛与对照方案设计 | **尚未训练或评测** | 先把候选排序器做可靠，再与等预算 continued SFT 对照 |
+
+早期记录中“叠加组件后 Task 3 宏平均约 `0.48`”只是把不同划分上的局部增益相加：
+DeepSeek 过滤来自 Test 抽样，SCSG 来自 Dev50。它不是一次完整端到端运行，也不是正式成绩；
+在统一的完整 Dev 上冻结组合、再运行一次 Test 之前，不能写成已经达到 `0.48`。
+
+## 通用大模型与微调 Qwen 的能力分工
+
+| 能力 | 通用大模型更有优势的部分 | 微调 Qwen 更有优势的部分 |
+|---|---|---|
+| 语义判断 | 强模型能判断 A–O 是否语义成立、发现英文误报和不自然边界；DeepSeek 英文过滤的 confirm 增益为 `+0.0459` | Qwen 已学会任务输出协议，原文锚定和批量生成更稳定 |
+| 结构召回 | Kimi 在 English Restaurant 的直接抽取较强，原始 Task 2 达 `0.6315` | 并非所有通用模型都强：DeepSeek V4 Flash 曾有 50.8% 空句，Task 3 仅 `0.4193`；本地 Qwen 更可控 |
+| Category | 通用模型适合对少量高冲突候选做语义复核 | Qwen 的域内标签先验明显更可靠；DeepSeek 全量重分类会把正确类别改错，Restaurant 尤其明显 |
+| 多语言/多领域 | 当前没有足够证据证明 API 模型在中文也有相同收益 | 一个适配器覆盖四个中英文数据集，输出稳定；中文 A–O 过滤实验也表明应保留 Qwen 基线 |
+| VA 数值 | 通用生成模型没有显示稳定优势 | 专门回归头能带来约 `0.006~0.010` 的小增益，但 VA 不是当前主要误差源 |
+
+因此，当前最合理的系统不是“用通用大模型替换 Qwen”，而是让 Qwen 做稳定候选生成和域内
+Category，让通用大模型只做高置信的英文 A–O 审查，再由专门回归头预测 VA。
+
+## Qwen 当前做得好与做得不好的地方
+
+**做得好：**
+
+- 输出稳定。seed 2971 的四 Dev 共 1,000 条无 JSON 解析失败；四 Test 共 4,000 条只有
+  2 次解析失败，完整 ID、顺序和指标已独立复核。
+- Restaurant Category 已较可靠。Test 抽样中，精确 A–O 条件下 English/Chinese
+  Restaurant 的原 Category 正确率约为 `0.99/0.93`，通用模型重分类反而破坏它。
+- 单模型覆盖四个中英文域，且 English Restaurant Task 3 单次 greedy `0.5781` 已略高于
+  旧 Qwen 三视角投票系统 `0.5735`。
+
+**做得不好：**
+
+- English Laptop 的 121 类细粒度 Category 是最大短板。Test 中精确 A–O 命中后仍有
+  419 个关系类别错误，Task 3 只有 `0.3083`。
+- A–O 召回、边界和误报仍限制 Task 2/3。候选 Oracle 很高而简单投票无效，说明模型能
+  偶尔生成正确答案，却不能稳定给正确候选更高分。
+- 同一全局策略会伤害强域：Category 头、SCSG 和 API 改写都出现 Laptop 有益、Restaurant
+  退化，必须按语言和领域路由。
+- 当前 VA 已相对可用，继续做全局数值校准收益很小，不能掩盖结构和类别问题。
+
+## 下一步研究路线
+
+1. **先训练候选排序器，而不是立刻继续 RL。** 用 Train 生成多候选，按 A–O 有效性、
+   边界、Category 与 VA 分解成 rubric，训练 Bradley–Terry 成对排序器；按 record 分组切分，
+   并在完整 Official Dev 上校准和验收。
+2. **按域分工。** Restaurant 保留 Qwen 原输出；English Laptop 加 A–O 审查和 Category
+   reranker；Chinese Laptop 仅在完整 Dev 复现后启用 SCSG；不要把局部组件全局套用。
+3. **采用混合系统。** Qwen 负责生成和域内标签，通用大模型只审查困难英文候选，RoBERTa
+   或 Task 1 回归头负责 VA。这样对应了各模型已经实测的强项。
+4. **再比较 RAFT 与 continued SFT。** 只有排序器通过完整 Dev 门槛后，才在相同数据量、
+   step、seed 和计算预算下比较 gold-anchored RAFT 与继续金标 SFT；RAFT 当前仍是待验证方案。
+5. **一次冻结、一次 Test。** 先在完整 Dev 做 baseline、单组件和组合消融；建议门槛为宏平均
+   至少 `+0.01`、强 Restaurant 域不明显下降、confirm 与 full 同方向。冻结后只运行一次 Test，
+   已经看过的 Test 结果只作诊断，不再反向选配置。
