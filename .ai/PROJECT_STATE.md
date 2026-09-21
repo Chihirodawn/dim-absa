@@ -6,9 +6,9 @@
 - 项目目标：使用同一个 Qwen3-4B-Instruct-2507 完成中文与英文 Restaurant 的 DimASR、DimASTE 与 DimASQP，并比较 Instruct 与 LoRA 路线。
 - 当前阶段：中文 Instruct、英文 Qwen LoRA 三任务、Gemma 4 E4B-it Task 1 对照，以及
   英文 Task 2/3 三视角动态检索、投票与关系 RoBERTa 重评分均已完成；英文 Task 1 的
-  连续回归第一阶段 Dev-only 消融也已完成；云端 RTX 4090 D 复现已完成（Task 1 Test
-  RMSE 1.1578，Task 2/3 cF1 0.6166/0.5735），结果与本地历史一致或更优。
-  本次修改尚未发布 GitHub。
+  连续回归第一阶段 Dev-only 消融也已完成。2026-09 的 Qwen3-8B 中英文四数据集
+  Task 2/3 SFT 与后处理消融已整理进 README：冻结 Test 宏平均为 Task 2 `0.5328`、
+  Task 3 `0.4372`，当前重点转为候选排序、按域路由和英文 A–O 精度过滤。
 - 主要使用者：项目所有者与协作 AI。
 
 ## 2. 技术栈
@@ -103,6 +103,10 @@ RUN_MODE=full CONFIRM_FULL_RUN=YES /root/miniconda3/bin/python \
 
 ## 8. 最近更新
 
+- 2026-09-21：README 新增 2026-09 Task 2/3 中英文完整研究总结，明确当前 Qwen3-8B
+  在 English Restaurant Task 3 上略高于旧 Qwen 混合系统和 Kimi 原始输出，但仍低于
+  Kimi + RoBERTa 最终系统；同时分解通用大模型与微调 Qwen 的强弱项，记录 RAFT 尚未
+  实际运行，并把跨划分组件叠加的 `~0.48` 更正为估算而非正式结果。
 - 2026-08-10：Codex 初始化项目、完整资源、推理/评测代码、离线测试、README 与均值基线。
 - 2026-08-11：完成云端正式 Task 1；新增 Transformers 后端、稳定输出协议、格式重试和线性校准，最终 test RMSE 1.1149206501。
 - 2026-08-11：发布公开仓库 `https://github.com/Chihirodawn/dim-absa`；只包含安全发布范围。

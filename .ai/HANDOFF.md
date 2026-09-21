@@ -1,5 +1,25 @@
 # 最近一次 AI 交接
 
+## 2026-09-21：Task 2/3 中英文实验总结发布
+
+- 当前目标：把 2026-09 的完整 Task 2/3 实验过程、Qwen 与通用大模型的能力分工、
+  当前瓶颈和下一步路线写入公开仓库 README。
+- 已完成：README 新增 Qwen3-8B seed2971 四 Test 表、实验阶段表、通用大模型/Qwen
+  能力对照、Qwen 强弱项和五步改进路线；原 English Restaurant 表补入当前 8B 结果。
+- 关键结论：当前 Qwen3-8B Task 3 `0.5781` 略高于旧 Qwen `0.5735` 与 Kimi 原始
+  `0.5762`，但低于 Kimi + RoBERTa `0.5858`；English Laptop Category 与 A–O
+  召回/候选排序仍是主瓶颈。RAFT 尚未运行。
+- 口径更正：`~0.48` 是 Test 抽样过滤增益与 Dev50 SCSG 增益的跨划分相加估算，不是
+  完整端到端结果；README 已明确禁止将其作为正式成绩。
+- 修改文件：`README.md`、`.ai/TASKS.md`、`.ai/PROJECT_STATE.md`、
+  `.ai/DECISIONS.md`、`.ai/HANDOFF.md`。
+- 新实验：无；本轮仅整理已有记录，因此没有向 `.ai/EXPERIMENTS.md` 追加条目。
+- 验证：`git diff --check`、Markdown 结构/链接检查、敏感文件范围检查。具体结果见本次
+  提交与最终工作区状态。
+- Git：`main`，本轮提交见 `git log -1`；推送后工作区应保持 clean。
+- 下一步：在完整 Official Dev 上训练并冻结成对候选排序器；通过门槛后再公平比较
+  continued gold SFT 与 gold-anchored RAFT，不直接进入在线 RL。
+
 ## 1. 基本信息
 
 - 更新时间：2026-08-17

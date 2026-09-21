@@ -358,3 +358,15 @@
   正式选型，会造成 Test 泄漏。
 - 额外修正：API 抽取脚本的关系 VA 重评分必须载入 `encoder_trainable.pt` 与 `regressor.pt`，
   不允许任何固定 `5.0/5.0` 的占位输出参与评测。
+
+## Task 3 报告按组件职责比较，不作单一底座优劣判断（2026-09-21）
+
+- 决策：README 同时报告当前 Qwen3-8B 单次 greedy、旧 Qwen 检索投票系统、Kimi 原始
+  输出和 Kimi + RoBERTa 最终系统；只在相同 English Restaurant 数据集上比较数值，
+  不把不同组件、数据范围和预算的系统差异写成纯底座排名。
+- 依据：当前 Qwen3-8B Task 3 `0.5781` 略高于旧 Qwen `0.5735` 和 Kimi 原始
+  `0.5762`，但低于 Kimi + RoBERTa `0.5858`。DeepSeek 全量重分类会破坏 Qwen 的域内
+  Category，而英文 A–O 候选审查在 confirm 上有 `+0.0459`，说明二者应分工而非互相替代。
+- 后续：Qwen 保留为稳定候选生成器；通用大模型只作英文高置信过滤/教师；VA 使用专门
+  回归头。先在完整 Dev 验证 Bradley–Terry 类候选排序器，再公平比较 continued SFT 与
+  gold-anchored RAFT；不得把尚未执行的 RAFT 或跨划分相加的 `~0.48` 写成已有结果。
